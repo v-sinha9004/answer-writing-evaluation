@@ -15,9 +15,18 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
 LANGFUSE_HOST = (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL") or "https://cloud.langfuse.com").strip()
-# Ensure both env vars are populated for Langfuse SDK
+LANGFUSE_ENVIRONMENT = (
+    os.getenv("LANGFUSE_ENVIRONMENT")
+    or os.getenv("LANGFUSE_TRACING_ENVIRONMENT")
+    or os.getenv("ENVIRONMENT")
+    or "development"
+).strip().lower()
+
+# Ensure standard env vars are populated for Langfuse SDK
 os.environ["LANGFUSE_HOST"] = LANGFUSE_HOST
 os.environ["LANGFUSE_BASEURL"] = LANGFUSE_HOST
+os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = LANGFUSE_ENVIRONMENT
+os.environ["LANGFUSE_ENVIRONMENT"] = LANGFUSE_ENVIRONMENT
 
 def is_langfuse_enabled() -> bool:
     """Check if Langfuse credentials are configured."""
