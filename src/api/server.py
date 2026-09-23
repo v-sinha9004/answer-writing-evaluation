@@ -84,8 +84,8 @@ async def evaluate_pdf(
         if not pdf_bytes or len(pdf_bytes) < 10:
             raise HTTPException(status_code=400, detail="Uploaded PDF file is empty.")
 
-        # Process PDF to extract text / vision OCR
-        input_data = await pdf_processor.process_pdf(
+        # Process PDF to extract text / vision OCR via Vision OCR Agent
+        input_data = await pdf_processor.vision_ocr(
             pdf_bytes=pdf_bytes,
             subject_paper=paper,
             question_marks=marks,

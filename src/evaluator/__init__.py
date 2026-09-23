@@ -12,9 +12,12 @@ from src.evaluator.schemas import (
     KnowledgeEvaluation,
 )
 from src.evaluator.orchestrator import EvaluationOrchestrator
+from src.evaluator.pdf_processor import PDFProcessor, VisionOCRAgent
 
 __all__ = [
     "EvaluationOrchestrator",
+    "PDFProcessor",
+    "VisionOCRAgent",
     "EvaluationInput",
     "ComprehensiveEvaluationReport",
     "ConsolidatedScorecard",

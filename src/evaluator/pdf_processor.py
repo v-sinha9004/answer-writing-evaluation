@@ -1,252 +1,278 @@
-"""PDF extraction and OCR processing module for UPSC Mains answer copies."""
+"""Vision OCR Engine module for UPSC Mains answer copies, mirroring the dedicated OCR service."""
 
 import base64
-import io
 import logging
+import os
 import re
-from typing import Optional, Tuple, List
-import pypdf
-from PIL import Image
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional, Tuple, List, Literal, Dict, Any
+
 from openai import AsyncOpenAI
-from src.config import OPENAI_API_KEY, VISION_AGENT_MODEL
+from pydantic import BaseModel, Field
+
+from src.config import VISION_AGENT_MODEL
 from src.evaluator.observability import get_async_openai_client, observe_stage
 from src.evaluator.schemas import EvaluationInput
 
 logger = logging.getLogger("upsc-ocr")
 
+# Resolve system binary for PDF rendering (Poppler)
+PDFTOPPM_PATH = shutil.which("pdftoppm") or "/opt/homebrew/bin/pdftoppm"
+
+
+class UPSCAnswerOCRResponse(BaseModel):
+    """Structured response contract for UPSC answer copy transcription."""
+    question_text: str = Field(
+        default="",
+        description="The printed or handwritten question statement/prompt found at the top of the answer copy. Empty string if not present on the scanned page(s).",
+    )
+    question_marks: Optional[str] = Field(
+        default=None,
+        description="The allotted marks indicated for the question (e.g. '10 Marks', '15', '12.5', '250 words / 15m'), or null if not indicated.",
+    )
+    full_markdown_text: str = Field(
+        default="",
+        description="The entire transcribed candidate answer in clean Markdown, preserving headers (###), bullet points (- ), bold underlines (**word**), tables, and flowchart structure.",
+    )
+    detected_intro: str = Field(
+        default="",
+        description="The opening 1–2 paragraphs where the candidate sets context or defines the topic. Empty string if not present on the scanned page(s).",
+    )
+    detected_conclusion: str = Field(
+        default="",
+        description="The final closing paragraph written by the candidate. Empty string if not present on the scanned page(s).",
+    )
+    estimated_word_count: int = Field(
+        default=0,
+        description="Total word count of the candidate's written answer only (excluding the question statement and marks).",
+    )
+    legibility_status: Literal["CLEAR", "AVERAGE", "POOR"] = Field(
+        default="AVERAGE",
+        description="Overall readability of the candidate's handwriting across the scanned page(s).",
+    )
+
+
+UPSC_OCR_SYSTEM_PROMPT = """You are an expert handwritten document transcriber specializing in UPSC Civil Services Examination answer copies.
+Your job is to transcribe the candidate's handwritten pages into clean, structured Markdown with 100% fidelity.
+
+CRITICAL INSTRUCTIONS FOR TRANSCRIPTION:
+
+1. QUESTION AND MARKS EXTRACTION:
+   - Identify and extract the question statement/prompt (printed or handwritten) into `question_text`, but ignore/dont include the hindi translation of question_text.
+   - Identify any allotted marks specified alongside the question (e.g. "10", "15 Marks", "12.5", "10M") into `question_marks`. If not found, set to null.
+   - Do NOT include the question text or marks in `full_markdown_text` or `estimated_word_count`; `full_markdown_text` must focus strictly on the candidate's handwritten answer.
+
+2. VERBATIM TRANSCRIPTION ONLY (NO AUTO-CORRECTION):
+   - Transcribe EXACTLY what the candidate wrote.
+   - Do NOT correct grammatical mistakes, spelling errors, or incorrect historical dates/facts. Our evaluation agents must see the student's actual mistakes.
+
+3. PRESERVE STRUCTURAL DISCIPLINE:
+   - Convert handwritten section headings, underlined headers, or boxed headers into Markdown headings: `### Heading Name`.
+   - Convert bullet points, dashes, arrows, and numbers into standard Markdown lists (`- ` or `1. `).
+   - Convert underlined keywords or boxed phrases into bold (`**keyword**`).
+   - Preserve paragraph breaks with double newlines (`\\n\\n`).
+   - If multiple pages are provided, transcribe them sequentially in order as a single continuous answer.
+
+4. TABLES & FLOWCHARTS (CLEAN MARKDOWN):
+   - Transcribe handwritten comparison tables or data tables using standard GitHub Flavored Markdown tables (`| Column 1 | Column 2 |`).
+   - Transcribe flowcharts, cycle diagrams, or process structures using clean text arrows (e.g., `Step A -> Step B -> Step C`), indented hierarchical lists, or clean Markdown tables.
+
+5. IGNORE CROSSED-OUT / STRIKETHROUGH TEXT:
+   - Completely OMIT any words, sentences, or paragraphs that the candidate has scratched out or crossed out with a pen. Do not transcribe deleted mistakes.
+
+6. DIAGRAMS & DRAWINGS (SKIP THEM):
+   - Ignore pencil drawings, sketches, or maps. Do NOT attempt to transcribe diagram labels or arrows as garbled text. Simply transcribe the surrounding written text.
+
+7. ILLEGIBLE WORDS:
+   - If a word is impossible to decipher, write `[illegible]`. Never guess or hallucinate.
+
+8. SECTION IDENTIFICATION:
+   - `detected_intro`: Extract only the opening 1–2 paragraph(s) where the candidate sets context or defines the topic before the main body headings. If the provided page(s) do not contain an introduction, return an empty string `""`.
+   - `detected_conclusion`: Extract only the final closing paragraph or 'Way Forward'. If the provided page(s) do not contain a conclusion, return an empty string `""`.
+   - `estimated_word_count`: Total word count of the candidate's written answer only.
+   - `legibility_status`: Evaluate the overall handwriting legibility as "CLEAR", "AVERAGE", or "POOR".
+"""
+
+
+def _load_image_base64(image_path: str) -> Tuple[str, str]:
+    """Read an image file and return its mime type and Base64 encoded string."""
+    suffix = Path(image_path).suffix.lower()
+    mime_type = "image/png"
+    if suffix in [".jpg", ".jpeg"]:
+        mime_type = "image/jpeg"
+    elif suffix == ".webp":
+        mime_type = "image/webp"
+
+    with open(image_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    return mime_type, b64
+
 
 class PDFProcessor:
-    """Extracts candidate answer text from digital or scanned handwritten PDFs."""
+    """Vision OCR Agent that processes UPSC Mains answer copies matching the OCR repo architecture."""
 
     def __init__(self, client: Optional[AsyncOpenAI] = None, model: Optional[str] = None):
         self.client = client or get_async_openai_client()
         self.model = model or VISION_AGENT_MODEL
 
-    def render_pdf_pages_to_images(self, pdf_bytes: bytes, max_pages: int = 6) -> List[bytes]:
-        """Render PDF pages directly to high-resolution JPEG images using pypdfium2."""
-        images = []
-        try:
-            import pypdfium2 as pdfium
-            doc = pdfium.PdfDocument(pdf_bytes)
-            n_pages = min(len(doc), max_pages)
-            for i in range(n_pages):
-                page = doc[i]
-                # Render at 2x resolution (~150-200 DPI, perfect for OCR on handwriting)
-                pil_img = page.render(scale=2.0).to_pil()
-                if pil_img.mode != "RGB":
-                    pil_img = pil_img.convert("RGB")
-                # Downscale if excessively large to keep payload size optimal
-                if max(pil_img.size) > 2048:
-                    pil_img.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
-                buf = io.BytesIO()
-                pil_img.save(buf, format="JPEG", quality=85)
-                images.append(buf.getvalue())
-        except Exception as e:
-            logger.warning(f"pypdfium2 rendering fallback: {e}")
-        return images
+    def render_pdf_to_images(self, pdf_bytes: bytes) -> Tuple[List[str], str]:
+        """
+        Render all PDF pages to 150 DPI PNG images using pdftoppm.
+        Returns a tuple of (list of image file paths, temp_cleanup_dir).
+        """
+        temp_dir = tempfile.mkdtemp(prefix="upsc_pdf_render_")
+        pdf_tmp_path = os.path.join(temp_dir, "input.pdf")
 
-    def extract_text_and_images(self, pdf_bytes: bytes) -> Tuple[str, List[bytes]]:
-        """Extract embedded text and any embedded page images from PDF bytes."""
-        # 1. Extract digital text via pypdf
-        extracted_pages = []
-        try:
-            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-            for page in reader.pages:
-                text = page.extract_text() or ""
-                if text.strip():
-                    extracted_pages.append(text.strip())
-        except Exception as read_err:
-            logger.warning(f"pypdf text extraction warning: {read_err}")
+        with open(pdf_tmp_path, "wb") as f:
+            f.write(pdf_bytes)
 
-        full_text = "\n\n".join(extracted_pages).strip()
+        ppm_cmd = [
+            PDFTOPPM_PATH,
+            "-png",
+            "-r",
+            "150",
+            pdf_tmp_path,
+            os.path.join(temp_dir, "page"),
+        ]
+        proc = subprocess.run(ppm_cmd, capture_output=True, text=True, check=False)
+        if proc.returncode != 0:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise RuntimeError(f"pdftoppm failed: {proc.stderr or 'Failed to render PDF pages'}")
 
-        # 2. Extract images: Prefer rendering visual pages directly (essential for scanned copies)
-        images = self.render_pdf_pages_to_images(pdf_bytes)
+        rendered = sorted(
+            Path(temp_dir).glob("page-*.png"),
+            key=lambda p: [int(c) if c.isdigit() else c for c in re.split(r"(\d+)", p.name)]
+        )
+        if not rendered:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise RuntimeError("No rendered page images produced from PDF.")
 
-        # 3. Fallback to extracting embedded /XObject images via pypdf if pypdfium2 returned nothing
-        if not images:
-            try:
-                reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-                for page in reader.pages:
-                    if hasattr(page, "images") and page.images:
-                        for img in page.images:
-                            if hasattr(img, "data") and img.data:
-                                try:
-                                    im = Image.open(io.BytesIO(img.data))
-                                    if im.mode != "RGB":
-                                        im = im.convert("RGB")
-                                    buf = io.BytesIO()
-                                    im.save(buf, format="JPEG", quality=85)
-                                    images.append(buf.getvalue())
-                                except Exception:
-                                    images.append(img.data)
-            except Exception as img_err:
-                logger.warning(f"pypdf image extraction warning: {img_err}")
+        image_paths = [str(p) for p in rendered]
+        return image_paths, temp_dir
 
-        return full_text, images
+    @observe_stage(name="vision_ocr_agent", as_type="generation")
+    async def transcribe_with_vision(
+        self,
+        image_paths: List[str],
+        model: Optional[str] = None,
+    ) -> UPSCAnswerOCRResponse:
+        """Transcribe handwritten pages into structured UPSCAnswerOCRResponse using Vision LLM."""
+        if not image_paths:
+            return UPSCAnswerOCRResponse()
 
-    @observe_stage(name="vision_transcription", as_type="generation")
-    async def transcribe_images_with_vision(self, images: List[bytes]) -> str:
-        """Transcribe handwritten pages into structured markdown using vision model."""
-        if not images:
-            return ""
-
-        # Limit to first 6 images/pages to stay within token limits
-        selected_images = images[:6]
-        content_items = [
+        chosen_model = model or self.model
+        user_content: List[Dict[str, Any]] = [
             {
                 "type": "text",
                 "text": (
-                    "You are an expert UPSC Mains answer evaluator and OCR transcription specialist. "
-                    "Transcribe the handwritten answer from these uploaded page images accurately into clean Markdown format. "
-                    "Include the question text if visible at the top, preserve headings, numbered points, bullet points, "
-                    "and any diagrams described in text. Do not hallucinate content not present in the pages."
+                    f"Perform high-fidelity UPSC answer sheet OCR transcription on the attached {len(image_paths)} "
+                    f"page image(s). Follow all critical transcription rules verbatim."
                 ),
             }
         ]
 
-        for img_bytes in selected_images:
-            b64_img = base64.b64encode(img_bytes).decode("utf-8")
-            content_items.append({
+        for idx, path in enumerate(image_paths, 1):
+            mime_type, b64_str = _load_image_base64(path)
+            if len(image_paths) > 1:
+                user_content.append({
+                    "type": "text",
+                    "text": f"--- Candidate Answer Sheet Page {idx} of {len(image_paths)} ---",
+                })
+            user_content.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
+                "image_url": {
+                    "url": f"data:{mime_type};base64,{b64_str}",
+                    "detail": "high",
+                },
             })
 
-        logger.info(f"Calling vision model '{self.model}' with {len(selected_images)} page images...")
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": content_items}],
+        logger.info(f"Calling Vision OCR Agent '{chosen_model}' with {len(image_paths)} page images...")
+        response = await self.client.beta.chat.completions.parse(
+            model=chosen_model,
+            messages=[
+                {"role": "system", "content": UPSC_OCR_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            response_format=UPSCAnswerOCRResponse,
             temperature=0.0,
-            max_completion_tokens=2500,
         )
 
-        transcription = response.choices[0].message.content or ""
-        logger.info(f"Vision transcription succeeded with {len(transcription.split())} words.")
-        return transcription
+        if not response.choices or len(response.choices) == 0:
+            raise RuntimeError("Vision OCR Agent returned an empty response with no choices.")
 
-    @observe_stage(name="pdf_processing", as_type="span")
-    async def process_pdf(
+        choice = response.choices[0]
+        refusal = getattr(choice.message, "refusal", None)
+        if isinstance(refusal, str) and refusal.strip():
+            raise RuntimeError(f"Vision OCR Agent refused transcription request: {refusal}")
+
+        parsed = choice.message.parsed
+        if not parsed:
+            raise RuntimeError("Failed to parse structured UPSC answer from Vision OCR Agent response.")
+
+        logger.info(
+            f"Vision OCR Agent succeeded: word_count={parsed.estimated_word_count}, "
+            f"legibility={parsed.legibility_status}, question='{parsed.question_text[:50]}...'"
+        )
+        return parsed
+
+    @observe_stage(name="vision_ocr", as_type="span")
+    async def vision_ocr(
         self,
         pdf_bytes: bytes,
         subject_paper: str = "GS-1",
         question_marks: int = 15,
         question_override: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> EvaluationInput:
-        """Process an uploaded PDF and return a normalized EvaluationInput."""
-        text, images = self.extract_text_and_images(pdf_bytes)
+        """
+        Main entrypoint mirroring OCR repo endpoint:
+        1. Renders PDF pages to 150 DPI PNG images via pdftoppm.
+        2. Dispatches multimodal high-resolution pages to Vision LLM.
+        3. Returns normalized EvaluationInput populated directly from UPSCAnswerOCRResponse.
+        """
+        chosen_model = model or self.model
+        image_paths, temp_dir = self.render_pdf_to_images(pdf_bytes)
 
-        # If extracted text is very short (< 40 words) and images are present, run vision transcription
-        word_count = len(text.split())
-        if word_count < 40 and images:
-            try:
-                vision_text = await self.transcribe_images_with_vision(images)
-                if vision_text.strip():
-                    cleaned = vision_text.strip()
-                    if cleaned.startswith("```markdown"):
-                        cleaned = cleaned[len("```markdown"):].strip()
-                    elif cleaned.startswith("```"):
-                        cleaned = cleaned[3:].strip()
-                    if cleaned.endswith("```"):
-                        cleaned = cleaned[:-3].strip()
-                    text = cleaned
-            except Exception as e:
-                logger.error(f"Vision transcription error: {e}", exc_info=True)
+        try:
+            ocr_response = await self.transcribe_with_vision(image_paths, model=chosen_model)
+        finally:
+            if temp_dir and os.path.isdir(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
-        # If still empty, return a blank evaluation input
-        if not text:
-            logger.warning("No readable text found after digital extraction and OCR.")
-            return EvaluationInput(
-                question_text=question_override or "UPSC Question (Not detected)",
-                question_marks=question_marks,
-                full_markdown_text="",
-                detected_intro="",
-                detected_conclusion="",
-                estimated_word_count=0,
-                legibility_status="POOR",
-                subject_paper=subject_paper,
-            )
+        # Question text
+        final_question = (question_override or "").strip() or ocr_response.question_text.strip()
+        if not final_question:
+            final_question = "UPSC Question (Not detected)"
 
-        # Parse question if not explicitly provided
-        question_text = (question_override or "").strip()
-        answer_body = text
-
-        if not question_text:
-            question_text, answer_body = self._detect_question_and_body(text)
-
-        # Parse intro and conclusion
-        intro, conclusion = self._extract_intro_and_conclusion(answer_body)
-        total_words = len(answer_body.split())
+        # Marks
+        final_marks = question_marks
+        if ocr_response.question_marks:
+            digits = re.findall(r"\d+", ocr_response.question_marks)
+            if digits:
+                try:
+                    final_marks = int(digits[0])
+                except ValueError:
+                    final_marks = question_marks
 
         return EvaluationInput(
-            question_text=question_text,
-            question_marks=question_marks,
-            full_markdown_text=answer_body,
-            detected_intro=intro,
-            detected_conclusion=conclusion,
-            estimated_word_count=total_words,
-            legibility_status="CLEAR" if total_words > 80 else "AVERAGE",
+            question_text=final_question,
+            question_marks=final_marks,
+            full_markdown_text=ocr_response.full_markdown_text.strip(),
+            detected_intro=ocr_response.detected_intro.strip(),
+            detected_conclusion=ocr_response.detected_conclusion.strip(),
+            estimated_word_count=ocr_response.estimated_word_count or len(ocr_response.full_markdown_text.split()),
+            legibility_status=ocr_response.legibility_status or "AVERAGE",
             subject_paper=subject_paper,
         )
 
-    def _detect_question_and_body(self, text: str) -> Tuple[str, str]:
-        """Separate question prompt from answer body if question is at top."""
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
-        if not lines:
-            return "UPSC Mains Practice Question", text
+    # Backward compatibility alias
+    process_pdf = vision_ocr
 
-        # Check if first line matches a question pattern
-        first_line = lines[0]
-        cleaned_first_line = re.sub(r"^[#\*\_\s]+", "", first_line).strip()
-        question_pattern = re.compile(
-            r"^(?:Q(?:uestion)?[\s\.\d\:\)]|(?:\d+[\.\)]\s*)).+",
-            re.IGNORECASE,
-        )
 
-        is_question = bool(question_pattern.match(cleaned_first_line) or "?" in first_line)
+# Class alias for first-class Vision OCR Agent identity
+VisionOCRAgent = PDFProcessor
 
-        if is_question:
-            question = re.sub(r"\*\*+", "", first_line).strip("*#_ ")
-            idx = 1
-            # Continue reading question until '?' or explicit answer marker
-            while idx < len(lines):
-                line = lines[idx]
-                cleaned_line = re.sub(r"^[#\*\_\s]+", "", line).lower()
-                # Stop if answer marker is encountered
-                if cleaned_line.startswith(("ans", "answer", "intro", "heading", "#")):
-                    break
-                if "?" in lines[idx - 1]:
-                    break
-                if len(line) < 160:
-                    question += " " + re.sub(r"\*\*+", "", line).strip("*#_ ")
-                    idx += 1
-                else:
-                    break
 
-            body = "\n\n".join(lines[idx:])
-            # If body became empty, fallback so answer text is not lost
-            if not body.strip():
-                return question.strip(), text
-            return question.strip(), body.strip()
-
-        return "Examine the following question and evaluate the candidate's answer.", text
-
-    def _extract_intro_and_conclusion(self, answer_text: str) -> Tuple[str, str]:
-        """Heuristically extract introduction and conclusion paragraphs."""
-        paragraphs = [p.strip() for p in answer_text.split("\n\n") if p.strip()]
-        if not paragraphs:
-            return "", ""
-
-        # Filter out standalone headings for intro candidates
-        content_paras = [p for p in paragraphs if not p.startswith("#") and len(p.split()) > 8]
-
-        intro = content_paras[0] if content_paras else paragraphs[0]
-        conclusion = content_paras[-1] if len(content_paras) > 1 else ""
-
-        # Check if conclusion has explicit conclusion markers
-        for p in reversed(paragraphs):
-            lower = p.lower()
-            if any(k in lower for k in ["conclusion", "way forward", "thus,", "hence,", "in summary", "overall"]):
-                conclusion = p
-                break
-
-        return intro, conclusion

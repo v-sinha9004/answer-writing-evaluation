@@ -568,3 +568,119 @@ def test_agent_model_config_default_and_override(monkeypatch):
     assert orchestrator.master_arbiter.model == "gpt-4o-mini"
 
 
+@pytest.mark.anyio
+async def test_vision_ocr_agent_structured_parsing(tmp_path):
+    """Verify VisionOCRAgent and structured UPSCAnswerOCRResponse mapping to EvaluationInput."""
+    from src.evaluator.pdf_processor import (
+        PDFProcessor,
+        VisionOCRAgent,
+        UPSCAnswerOCRResponse,
+    )
+    from src.evaluator.schemas import EvaluationInput
+
+    assert VisionOCRAgent is PDFProcessor
+    processor = VisionOCRAgent()
+    assert processor.process_pdf == processor.vision_ocr
+
+    # Verify structured response validation
+    ocr_resp = UPSCAnswerOCRResponse(
+        question_text="Critically examine the impact of the Vernacular Press Act of 1878.",
+        question_marks="15 Marks",
+        full_markdown_text="### Introduction\nThe Vernacular Press Act was enacted by Lord Lytton...",
+        detected_intro="The Vernacular Press Act was enacted by Lord Lytton...",
+        detected_conclusion="Thus, the act became a catalyst for national consciousness.",
+        estimated_word_count=185,
+        legibility_status="CLEAR",
+    )
+    assert ocr_resp.question_text.startswith("Critically examine")
+    assert ocr_resp.estimated_word_count == 185
+    assert ocr_resp.legibility_status == "CLEAR"
+
+    # Create an actual test image file in tmp_path
+    test_img = tmp_path / "page_1.png"
+    test_img.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+
+    # Mock Vision LLM call returning structured UPSCAnswerOCRResponse
+    with patch.object(processor.client.beta.chat.completions, "parse", new_callable=AsyncMock) as mock_parse:
+        mock_choice = MagicMock()
+        mock_choice.message.parsed = ocr_resp
+        mock_choice.message.refusal = None
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_parse.return_value = mock_response
+
+        # Call transcribe_with_vision directly to verify prompt and parse invocation
+        parsed_direct = await processor.transcribe_with_vision([str(test_img)])
+        assert parsed_direct.question_text == "Critically examine the impact of the Vernacular Press Act of 1878."
+
+        # Call vision_ocr with fake pdf bytes
+        fake_pdf = b"%PDF-1.4 fake content for testing OCR engine"
+        with patch.object(processor, "render_pdf_to_images", return_value=([str(test_img)], str(tmp_path))):
+            result = await processor.vision_ocr(
+                pdf_bytes=fake_pdf,
+                subject_paper="GS-1",
+                question_marks=15,
+            )
+
+        assert isinstance(result, EvaluationInput)
+        assert result.question_text == "Critically examine the impact of the Vernacular Press Act of 1878."
+        assert result.question_marks == 15
+        assert result.detected_intro.startswith("The Vernacular Press Act")
+        assert result.detected_conclusion.startswith("Thus, the act")
+        assert result.estimated_word_count == 185
+        assert result.legibility_status == "CLEAR"
+        assert result.subject_paper == "GS-1"
+
+
+@pytest.mark.anyio
+async def test_vision_ocr_agent_omitted_intro_conclusion(tmp_path):
+    """Verify that when a candidate omits intro or conclusion, they are preserved as empty strings."""
+    from src.evaluator.pdf_processor import VisionOCRAgent, UPSCAnswerOCRResponse
+    from src.evaluator.schemas import EvaluationInput
+
+    processor = VisionOCRAgent()
+
+    # OCR detected that candidate skipped intro and conclusion
+    ocr_resp = UPSCAnswerOCRResponse(
+        question_text="Discuss the administrative reforms under Lord Cornwallis.",
+        question_marks="10",
+        full_markdown_text="### Permanent Settlement\nIntroduced in Bengal in 1793...",
+        detected_intro="",
+        detected_conclusion="",
+        estimated_word_count=120,
+        legibility_status="AVERAGE",
+    )
+
+    test_img = tmp_path / "p1.png"
+    test_img.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+
+    with patch.object(processor.client.beta.chat.completions, "parse", new_callable=AsyncMock) as mock_parse:
+        mock_choice = MagicMock()
+        mock_choice.message.parsed = ocr_resp
+        mock_choice.message.refusal = None
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_parse.return_value = mock_response
+
+        fake_pdf = b"%PDF-1.4 fake content"
+        with patch.object(processor, "render_pdf_to_images", return_value=([str(test_img)], str(tmp_path))):
+            result = await processor.vision_ocr(
+                pdf_bytes=fake_pdf,
+                subject_paper="GS-1",
+                question_marks=10,
+            )
+
+        assert result.detected_intro == ""
+        assert result.detected_conclusion == ""
+        assert result.estimated_word_count == 120
+        assert result.question_marks == 10
+
+
+def test_pypdfium2_not_imported():
+    """Verify pypdfium2 is completely removed and not loaded in memory."""
+    import src.evaluator.pdf_processor as proc_module
+    assert not hasattr(proc_module, "pdfium")
+    assert not hasattr(proc_module, "pypdfium2")
+
+
+
