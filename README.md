@@ -1,153 +1,180 @@
 # Autonomous UPSC Mains Answer Evaluation & Feedback Engine
 
-An autonomous, multi-agent evaluation engine designed to assess UPSC Mains handwritten answer copies, verify facts against grounded knowledge, and deliver calibrated scores with actionable feedback.
+An autonomous, multi-agent evaluation engine designed to assess UPSC Mains handwritten and digital answer copies, verify facts against grounded syllabus knowledge via Hybrid RAG, and deliver calibrated scores with actionable transformation roadmaps.
 
-The system uses an **Ensemble / "Panel of Judges" Architecture**, where isolated specialist agents evaluate specific dimensions (Demand, Structure, Diagrams, and RAG-grounded Facts) concurrently before a Master Scoring Agent synthesizes the final assessment.
+The system executes a **Deterministic Native DAG (Directed Acyclic Graph)** using an **Ensemble / "Panel of Judges" Architecture**. Five isolated specialist agents evaluate specific dimensions (Demand, Introduction, Structure, Conclusion, and RAG-grounded Facts) concurrently via asynchronous fan-out before a Master Scoring Arbiter synthesizes the final calibrated assessment.
 
 ---
 
-## System Architecture
+## Exact Agent DAG Architecture
+
+The evaluation pipeline operates as a deterministic, asynchronous state machine orchestrated by [`EvaluationOrchestrator`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/orchestrator.py):
 
 ```mermaid
 graph TD
-    subgraph Inputs["1. Candidate Submission"]
-        Q["Question Text, Paper Type & Marks"]
-        A_Img["Raw Handwritten Pages (Images / PDF)"]
-        A_Txt["Extracted Answer Text"]
+    subgraph S1_Ingestion["1. Ingestion & Preprocessing"]
+        PDF["Candidate Submission<br/>(PDF or Raw Text)"]
+        OCR["<b>PDF Processor & Vision Transcriber</b><br/>• pypdf digital text extraction<br/>• pypdfium2 high-res page rendering<br/>• Vision LLM (gpt-4o) OCR transcription"]
+        InputPayload["<b>EvaluationInput Schema</b><br/>• question_text & question_marks<br/>• full_markdown_text<br/>• detected_intro & detected_conclusion<br/>• estimated_word_count & legibility_status"]
+        
+        PDF --> OCR
+        OCR --> InputPayload
     end
 
-    subgraph Specialists["2. Isolated Specialist Agents (Concurrent Execution)"]
-        S1["<b>Demand & Directive Agent</b><br/>• Sub-part demand fulfillment<br/>• Directive adherence (Discuss, Critically Examine)<br/>• Balanced perspective check"]
-        S2["<b>Structure & Flow Agent</b><br/>• Introduction quality (definition / context)<br/>• Sub-headings & logical flow<br/>• Conclusion (forward-looking / way forward)"]
-        S3["<b>Diagram & Visual Agent (Vision-Based)</b><br/>• Maps, flowcharts & schematics inspection<br/>• Presentation & visual value additions"]
-        S4["<b>Knowledge & Fact Agent</b><br/>• Factual claim verification<br/>• Accurate dates, articles & data points<br/>• Domain-specific depth"]
+    subgraph S2_Preflight["2. Pre-Flight Short-Circuit"]
+        CheckBlank{"Is Answer Text<br/>Empty / Blank?"}
+        EmptyReport["<b>Empty Submission Handler</b><br/>• Zero LLM API calls / cost<br/>• 0.0 marks awarded<br/>• Troubleshooting & resubmission roadmap"]
+        
+        InputPayload --> CheckBlank
+        CheckBlank -- "Yes" --> EmptyReport
     end
 
-    subgraph Knowledge["Subject Knowledge Store"]
-        RAG[("Domain Knowledge Base / RAG<br/>(Textbooks, Reports, Schemes)")]
+    subgraph S3_FanOut["3. Parallel Specialist Fan-Out (asyncio.gather)"]
+        direction TB
+
+        Demand["<b>Demand & Directive Agent</b><br/>• Sub-part demand fulfillment (Coverage %)<br/>• Directive posture (Discuss, Evaluate, etc.)<br/>• Produces: DemandEvaluation"]
+
+        Intro["<b>Introduction Agent</b><br/>• Definition / contextual grounding<br/>• Conciseness check (30-40 words)<br/>• Produces: IntroEvaluation + Model Intro Rewrite"]
+
+        Structure["<b>Structure & Presentation Agent</b><br/>• Heading taxonomy (### Headings)<br/>• Bullet discipline & bold keyword prefixes<br/>• Produces: StructureEvaluation"]
+
+        Conclusion["<b>Conclusion & Way Forward Agent</b><br/>• Forward-looking perspective<br/>• Constitutional & national policy grounding<br/>• Produces: ConclusionEvaluation + Model Conclusion Rewrite"]
+
+        subgraph FactPipeline["Knowledge & Fact Verification Sub-DAG"]
+            ClaimExtract["<b>1. Claim Extraction</b><br/>Extract 3-6 testable assertions<br/>(dates, acts, treaties, events)"]
+            
+            subgraph HybridRAGStore["Hybrid RAG Retrieval Engine"]
+                Dense["ChromaDB Vector Store<br/>(text-embedding-3-small)"]
+                Sparse["BM25 Lexical Index<br/>(Tokenized Ranker)"]
+                RRF["Reciprocal Rank Fusion<br/>(RRF Score Aggregator)"]
+                Dense --> RRF
+                Sparse --> RRF
+            end
+
+            ClaimVerify["<b>2. Grounded Fact Verification</b><br/>Cross-reference against Spectrum passages<br/>Classify: VERIFIED / INCORRECT / UNVERIFIED<br/>Syllabus enrichments & corrections"]
+
+            ClaimExtract --> Dense
+            ClaimExtract --> Sparse
+            RRF --> ClaimVerify
+        end
     end
 
-    Q --> S1
-    A_Txt --> S1
+    CheckBlank -- "No (Valid Answer)" --> Demand
+    CheckBlank -- "No (Valid Answer)" --> Intro
+    CheckBlank -- "No (Valid Answer)" --> Structure
+    CheckBlank -- "No (Valid Answer)" --> Conclusion
+    CheckBlank -- "No (Valid Answer)" --> ClaimExtract
 
-    A_Txt --> S2
-
-    A_Img --> S3
-
-    Q --> S4
-    A_Txt --> S4
-    RAG <--> S4
-
-    subgraph Synthesis["3. Arbitration & Scoring"]
-        Master["<b>Master Scoring & Synthesis Agent</b><br/>• Weighted mathematical score aggregation<br/>• Resolves inter-agent conflicts<br/>• Eliminates score inflation / deflation"]
+    subgraph S4_FaultTolerance["4. Fault-Tolerance & Fallback Layer"]
+        FallbackCatch["Typed Fallbacks on Exception<br/>(DemandEvaluation.fallback(), etc.)<br/>Guarantees pipeline resilience"]
     end
 
-    S1 --> Master
-    S2 --> Master
-    S3 --> Master
-    S4 --> Master
+    Demand --> FallbackCatch
+    Intro --> FallbackCatch
+    Structure --> FallbackCatch
+    Conclusion --> FallbackCatch
+    ClaimVerify --> FallbackCatch
 
-    subgraph Output["4. Structured Output"]
-        Report["<b>Comprehensive Evaluation Report</b><br/>• Parameter-wise Scorecard (e.g., 5.5 / 10)<br/>• Factual Verification Log<br/>• Actionable High-Impact Value Additions"]
+    subgraph S5_FanIn["5. Master Scoring Arbiter (Fan-In Synthesis)"]
+        Arbiter["<b>Master Scoring & Synthesis Agent</b>"]
+
+        subgraph MathScoring["Deterministic Scoring Engine"]
+            Weights["<b>Calibrated Rubric Weights:</b><br/>• Knowledge & Facts: 35%<br/>• Demand & Directive: 30%<br/>• Conclusion & Way Forward: 15%<br/>• Structure & Presentation: 10%<br/>• Introduction: 10%"]
+            DynWeight["Dynamic Weight Redistribution<br/>(Re-normalizes if any agent fails)"]
+            Penalties["Deduction Rules<br/>• Missing Intro: 0/10<br/>• Missing Conclusion: 0/10<br/>• Under-length (<45% of expected): -1.0 mark"]
+            Verdict["Benchmark Verdict Calibration<br/>(<35%: Below Avg | 35-50%: Avg<br/>50-65%: Good | >65%: Topper Quality)"]
+            
+            Weights --> DynWeight --> Penalties --> Verdict
+        end
+
+        subgraph QualSynthesis["LLM Qualitative Synthesis"]
+            Roadmap["Transformation Roadmap<br/>(Current Diagnosis → Step 1 [55%] → Step 2 [70%+])"]
+            ValueAdd["Top 3 High-Yield Value Additions<br/>(+1.5 mark micro-boosters)"]
+            Telemetry["Per-Agent Token Usage & Latency Aggregation"]
+        end
+
+        Arbiter --> MathScoring
+        Arbiter --> QualSynthesis
     end
 
-    Master --> Report
+    FallbackCatch --> Arbiter
+
+    subgraph S6_Delivery["6. Observability, Persistence & Delivery"]
+        FinalReport["<b>ComprehensiveEvaluationReport Schema</b>"]
+        DB[("SQLite Database<br/>data/evaluations.db")]
+        Langfuse["Langfuse Tracing<br/>(@observe_stage, spans, trace URL)"]
+        Client["FastAPI REST API (/api/evaluate)<br/>& React/Vite Frontend Dashboard"]
+
+        Verdict --> FinalReport
+        QualSynthesis --> FinalReport
+        FinalReport --> DB
+        FinalReport --> Langfuse
+        FinalReport --> Client
+    end
 ```
 
 ---
 
-## Specialist Agent Breakdown
+## Detailed Agent Breakdown
 
-| Agent | Input Type | Isolated Responsibility | Output Produced |
-| :--- | :--- | :--- | :--- |
-| **1. Demand & Directive Agent** | Text | Validates whether all sub-parts of the question were answered and whether the analytical posture matches the directive (`Critically Examine`, `Evaluate`, `Elucidate`). | Demand coverage %, unaddressed sub-parts, directive adherence score. |
-| **2. Structure & Flow Agent** | Text | Evaluates structural discipline: contextual introduction, clear heading taxonomy, bullet points, smooth transitions, and a forward-looking conclusion. | Structural score, organization breakdown, flow critique. |
-| **3. Diagram & Visual Agent** | Vision (Image) | Directly inspects handwritten pages to evaluate pencil/pen diagrams, geography maps, flowcharts, and spatial presentation. | Diagram detection, visual relevance score, missing visual opportunities. |
-| **4. Knowledge & Fact Agent** | Text + RAG | Extracts factual claims, dates, constitutional articles, and data points, verifying them against the reference knowledge store. | Fact-check verification report, factual errors, missing core domain points. |
-| **5. Master Scoring Agent** | Agent Reports | Applies a weighted scoring formula across all specialist evaluations, calibrates the final score, and synthesizes unified actionable advice. | Final calibrated marks, strengths, critical gaps, and high-impact value additions. |
+| Node / Agent | Module File | Input Data | Core Responsibility & Criteria | Rubric Weight | Key Output Artifacts |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **PDF Ingestion & Vision OCR** | [`pdf_processor.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/pdf_processor.py) | Uploaded PDF bytes / scanned pages | • Extracts digital text via `pypdf`<br/>• Renders pages via `pypdfium2`<br/>• Transcribes handwriting using Vision LLM (`gpt-4o`) if digital text < 40 words<br/>• Heuristically segments question, intro, and conclusion | Pre-processing | [`EvaluationInput`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py) payload |
+| **1. Demand & Directive Agent** | [`demand_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/demand_agent.py) | `question_text`, `full_markdown_text`, `question_marks` | • Identifies explicit and implicit sub-demands<br/>• Evaluates directive posture (`Critically Examine`, `Discuss`, `Evaluate`, `Elucidate`)<br/>• Checks core vs peripheral focus | **30%** | `directive_adherence_score` (0-10), `demand_coverage_pct`, list of unaddressed sub-parts, itemized critique |
+| **2. Introduction Agent** | [`intro_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/intro_agent.py) | `question_text`, `detected_intro`, `question_marks` | • Validates introduction presence<br/>• Assesses conciseness (target: 30-40 words)<br/>• Checks contextual definition, origin, or contemporary background | **10%** | `intro_present` (bool), `intro_score` (0-10), `conciseness_score`, `contextual_score`, plug-and-play `model_intro_rewrite` |
+| **3. Structure & Presentation Agent** | [`structure_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/structure_agent.py) | `question_text`, `full_markdown_text` | • Audits heading taxonomy (`### Headings` matching question keywords)<br/>• Enforces bullet formatting discipline and bold keyword prefixes<br/>• Evaluates logical flow and readability transitions | **10%** | `structural_score` (0-10), `heading_taxonomy_score`, `bullet_discipline_score`, concrete formatting upgrades |
+| **4. Conclusion & Way Forward Agent** | [`conclusion_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/conclusion_agent.py) | `question_text`, `detected_conclusion`, `question_marks` | • Validates conclusion presence<br/>• Assesses forward-looking balance (Way Forward / solutions)<br/>• Bridges topic to constitutional values, SDGs, or national vision | **15%** | `conclusion_present` (bool), `conclusion_score` (0-10), `forward_looking_score`, `balance_score`, plug-and-play `model_conclusion_rewrite` |
+| **5. Knowledge & Fact Agent** | [`fact_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/fact_agent.py) | `question_text`, `full_markdown_text`, Hybrid RAG | **Sub-DAG:**<br/>1. Extracts 3-6 testable factual claims (dates, acts, articles, treaties)<br/>2. Retrieves authentic passages via Hybrid RAG (ChromaDB dense vectors + BM25 sparse lexical search + RRF fusion)<br/>3. Verifies each claim (`VERIFIED`, `INCORRECT`, `UNVERIFIED`) and provides textbook corrections | **35%** | `factual_accuracy_score` (0-10), itemized `claims_checked` with corrections and citations, `syllabus_enrichments` |
+| **6. Master Scoring Arbiter** | [`master_arbiter.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/master_arbiter.py) | Outputs of all 5 specialists + `EvaluationInput` | • Deterministic mathematical score aggregation with dynamic re-weighting upon partial failures<br/>• Applies penalties (missing intro/conclusion, severe under-length)<br/>• Calibrates score against real-world UPSC benchmarks<br/>• Synthesizes unified Transformation Roadmap and Top 3 Value Additions<br/>• Consolidates token usage telemetry | Arbiter / Fan-In | [`ComprehensiveEvaluationReport`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py), [`ConsolidatedScorecard`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py), [`TransformationRoadmap`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py) |
 
 ---
 
-## Sequential Implementation Roadmap
+## Scoring Formula & Calibration Rules
 
-We develop the system step-by-step, beginning with a **GS-1 pilot (History, Geography, Society)**.
+### 1. Deterministic Weight Distribution
+The Master Arbiter computes the candidate's composite score using an objective mathematical formula rather than freeform LLM estimation:
+
+$$\text{Raw Weighted Score (out of 10)} = 0.35 \times S_{\text{fact}} + 0.30 \times S_{\text{demand}} + 0.15 \times S_{\text{conclusion}} + 0.10 \times S_{\text{structure}} + 0.10 \times S_{\text{intro}}$$
+
+$$\text{Scaled Score} = \left(\frac{\text{Raw Weighted Score}}{10.0}\right) \times \text{Question Marks}$$
+
+### 2. Dynamic Weight Redistribution
+If any specialist agent encounters a failure or timeout, the orchestrator catches it via typed fallback objects, and the Master Arbiter dynamically excludes that dimension and re-normalizes the remaining active weights so they strictly sum to 1.0 (100%), preventing systemic score collapse.
+
+### 3. Objective Penalties
+- **Missing Introduction:** Automatically awards `0.0 / 10` for the opening dimension.
+- **Missing Conclusion:** Automatically awards `0.0 / 10` for the Way Forward dimension.
+- **Severe Under-Length Deduction:** If the word count is less than 45% of the expected length (150 words for 10M, 250 words for 15M), an automatic `-1.0 mark` deduction is applied.
+
+### 4. Benchmark Verdict Calibration
+Scores are mapped directly to calibrated UPSC percentile tiers:
+- **< 35.0%:** *Below Average / Needs Fundamental Revision*
+- **35.0% – 49.9%:** *Average / Baseline Attempt*
+- **50.0% – 64.9%:** *Good / Competitive Mains Standard*
+- **$\ge$ 65.0%:** *Topper Quality / Exceptional Answer*
+
+---
+
+## Implementation Roadmap & Status
 
 ```
-[Milestone 1: Multi-Agent Core Engine & GS-1 Pilot]
-  ├── Step 1: Agent Schemas & Shared Evaluation State
+[Milestone 1: Multi-Agent Core Engine & GS-1 Pilot]  [COMPLETED]
+  ├── Step 1: Standardized Pydantic Schemas & Shared Evaluation State
   ├── Step 2: Demand & Directive Evaluator Agent
-  ├── Step 3: Structure & Presentation Evaluator Agent
-  ├── Step 4: Diagram & Visual Agent (Vision LLM)
-  ├── Step 5: Knowledge & Fact Agent with RAG Store
-  ├── Step 6: Master Scoring & Synthesis Agent
-  └── Step 7: End-to-End Orchestrator & Benchmark Testing
+  ├── Step 3: Introduction Evaluator Agent & Model Rewrites
+  ├── Step 4: Structure & Heading Taxonomy Evaluator Agent
+  ├── Step 5: Conclusion & Way Forward Evaluator Agent
+  ├── Step 6: Knowledge & Fact Agent with Hybrid RAG (ChromaDB + BM25 + RRF)
+  ├── Step 7: Master Scoring Arbiter & Qualitative Transformation Roadmap
+  └── Step 8: Asynchronous Orchestrator DAG with Fault-Tolerant Fan-Out / Fan-In
                 │
                 ▼
-[Milestone 2: Generalization & Advanced Features]
-  ├── Step 8: Domain Knowledge Expansion (GS-2, GS-3, GS-4)
-  ├── Step 9: Visual Coordinate Annotations on Handwritten PDFs
-  ├── Step 10: Tracing, Observability & Deployment
+[Milestone 2: Infrastructure, UI & Generalization]    [IN PROGRESS]
+  ├── [x] Vision-based Handwritten Answer OCR Pipeline (pypdfium2 + Vision LLM)
+  ├── [x] Langfuse Observability Integration (@observe_stage, latency & token telemetry)
+  ├── [x] SQLite Evaluation Persistence (data/evaluations.db)
+  ├── [x] FastAPI REST Server (/api/evaluate, /api/history, /api/health)
+  ├── [x] Interactive Frontend (React + Vite + Tailwind + Radix UI)
+  ├── [ ] Domain Knowledge Expansion to GS-2, GS-3, and GS-4
+  └── [ ] Visual Coordinate Margin Annotations on Original Handwritten PDFs
 ```
-
----
-
-### Milestone 1: Multi-Agent Core Engine (Piloting on GS-1)
-*Goal: Build an end-to-end, multi-agent evaluation pipeline using GS-1 as our first baseline.*
-
-#### Step 1: Agent Schemas & Shared Evaluation State
-- [ ] Define standardized Pydantic data schemas for:
-  - Input: Question, marks, candidate text, and raw page images.
-  - Agent Outputs: Individual scorecards, flags, and itemized feedback from each specialist agent.
-  - Final Output: Consolidated evaluation report and rubric breakdown.
-
-#### Step 2: Demand & Directive Evaluator Agent
-- [ ] Build the isolated prompt and logic to:
-  - Deconstruct question into sub-demands.
-  - Enforce directive rules (`Discuss` vs `Critically Analyze` vs `Examine`).
-  - Score question demand fulfillment.
-
-#### Step 3: Structure & Flow Evaluator Agent
-- [ ] Build the isolated prompt and logic to:
-  - Analyze introduction quality (context/definition).
-  - Inspect body structuring (use of subheadings, bullet points, paragraph balance).
-  - Assess conclusion (balance, forward-looking perspective).
-
-#### Step 4: Diagram & Visual Agent (Multimodal Vision)
-- [ ] Build the vision-based inspection pipeline:
-  - Process handwritten answer page images directly via Vision LLM.
-  - Detect maps, flowcharts, tables, and diagrams.
-  - Evaluate visual quality and recommend spatial/diagram additions.
-
-#### Step 5: Knowledge & Fact Agent with RAG Store
-- [ ] Build knowledge grounding pipeline:
-  - Extract entities, dates, and claims from the candidate's answer.
-  - Set up a lightweight RAG store (curated GS-1 reference texts/facts).
-  - Ground factual accuracy and flag errors or unverified statements.
-
-#### Step 6: Master Scoring & Synthesis Agent
-- [ ] Build the aggregation arbiter:
-  - Apply weighted scoring rubric across all specialist outputs.
-  - Calibrate marks to real-world UPSC standards (avoid score inflation).
-  - Synthesize a coherent, non-redundant feedback report.
-
-#### Step 7: End-to-End Orchestrator & Testing
-- [ ] Connect agents into an asynchronous state machine (running specialists in parallel).
-- [ ] Test against sample GS-1 answers to verify accuracy, latency, and feedback quality.
-
----
-
-### Milestone 2: Generalization & Advanced Capabilities
-*Goal: Expand domain depth across all General Studies papers and build production UI overlays.*
-
-#### Step 8: Domain Expansion to GS-2, GS-3, and GS-4
-- [ ] **GS-2 Knowledge Store:** Articles, Supreme Court precedents, Law Commission / 2nd ARC reports.
-- [ ] **GS-3 Knowledge Store:** Budget/Economic Survey data, schemes, NITI Aayog indices, environment treaties.
-- [ ] **GS-4 Ethics Module:** Thinkers, ethical frameworks, case-study stakeholder matrix.
-
-#### Step 9: Visual Margin Annotations
-- [ ] Project agent findings onto pixel coordinates of original answer sheets.
-- [ ] Output an annotated PDF with color-coded margin notes (red for factual errors, green for strong points, blue for structure).
-
-#### Step 10: Tracing, Observability & Deployment
-- [ ] Trace latency and cost per agent.
-- [ ] Package orchestrator into a clean API / CLI for easy integration.
