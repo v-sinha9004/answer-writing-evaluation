@@ -106,12 +106,9 @@ class EvaluationOrchestrator:
         )
 
         roadmap = TransformationRoadmap(
-            current_level_summary="Blank copy detected. No written text was provided for evaluation.",
-            step_1_good_answer=[
+            good_answer_steps=[
                 "Ensure answer page images are clear, properly lighted, and legible before uploading.",
-                "Verify OCR transcription contains the written answer text.",
-            ],
-            step_2_topper_answer=[
+                "Verify OCR transcription contains the complete written answer text.",
                 "Write an answer addressing all sub-demands of the question within the prescribed word limit.",
             ],
         )

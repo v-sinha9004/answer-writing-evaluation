@@ -894,6 +894,11 @@
   gap: 24px;
 }
 
+.roadmap-single-column {
+  display: flex;
+  flex-direction: column;
+}
+
 @media (max-width: 640px) {
   .roadmap-columns {
     grid-template-columns: 1fr;

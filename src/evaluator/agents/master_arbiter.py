@@ -23,9 +23,9 @@ from src.evaluator.prompts import MASTER_ARBITER_PROMPT
 
 class ArbiterSynthesis(BaseModel):
     """Structured output for the Master Arbiter's qualitative synthesis."""
-    current_level_summary: str = Field(description="Short diagnosis of the answer's current state")
-    step_1_good_answer: List[str] = Field(description="Top 2-3 concrete fixes to reach 55% marks")
-    step_2_topper_answer: List[str] = Field(description="Advanced additions to reach 70%+ topper level")
+    good_answer_steps: List[str] = Field(
+        description="Top 3-4 concrete actionable steps to elevate this answer to a solid UPSC standard (55%+ marks), addressing demand gaps, factual corrections, structure, and framework."
+    )
     top_value_additions: List[str] = Field(description="Top 3 highest-yield micro-boosters")
 
 
@@ -231,8 +231,8 @@ class MasterScoringAgent(BaseAgent):
 - Critique: {fact_eval.critique}
 
 Provide:
-1. 3-step Answer Transformation Roadmap (current_level_summary, step_1_good_answer, step_2_topper_answer).
-2. Exactly top 3 high-impact value additions (+1.5 mark boosters).
+1. Concrete actionable steps to reach 55%+ marks (good_answer_steps): Top 3-4 prioritized action items addressing major demand gaps, factual fixes, structural clarity, and intro/conclusion.
+2. Exactly top 3 high-impact value additions (top_value_additions).
 """
 
         master_usage = TokenUsage()
@@ -243,22 +243,17 @@ Provide:
                 response_format=ArbiterSynthesis,
             )
             roadmap = TransformationRoadmap(
-                current_level_summary=synthesis.current_level_summary,
-                step_1_good_answer=synthesis.step_1_good_answer,
-                step_2_topper_answer=synthesis.step_2_topper_answer,
+                good_answer_steps=synthesis.good_answer_steps,
             )
             value_additions = synthesis.top_value_additions
         except Exception as e:
             # Safe fallback if synthesis LLM call fails
             roadmap = TransformationRoadmap(
-                current_level_summary=f"Evaluated at {scorecard.total_score}/{scorecard.max_marks}.",
-                step_1_good_answer=[
+                good_answer_steps=[
+                    "Exhaustively address all sub-demands and directive terms of the question.",
                     "Fix factual inaccuracies identified in the knowledge audit.",
-                    "Adopt bold-prefixed bullet points for structural clarity.",
-                ],
-                step_2_topper_answer=[
-                    "Incorporate the provided Model Introduction and Model Conclusion.",
-                    "Ensure exhaustive coverage of all question sub-parts.",
+                    "Adopt bold-prefixed bullet points under distinct thematic headings.",
+                    "Adopt the provided Model Introduction and forward-looking Model Conclusion.",
                 ],
             )
             value_additions = [

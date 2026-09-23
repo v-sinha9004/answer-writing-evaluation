@@ -60,9 +60,7 @@ async def test_evaluate_sample_endpoint(client):
         conclusion_evaluation=ConclusionEvaluation(conclusion_score=7.0),
         knowledge_evaluation=KnowledgeEvaluation(factual_accuracy_score=8.0),
         transformation_roadmap=TransformationRoadmap(
-            current_level_summary="Good base",
-            step_1_good_answer=["Fix points"],
-            step_2_topper_answer=["Add analysis"],
+            good_answer_steps=["Fix points"],
         ),
         top_value_additions=["Add diagram"],
     )
@@ -105,9 +103,7 @@ async def test_evaluate_pdf_upload_success(client):
         conclusion_evaluation=ConclusionEvaluation(),
         knowledge_evaluation=KnowledgeEvaluation(),
         transformation_roadmap=TransformationRoadmap(
-            current_level_summary="Topper quality",
-            step_1_good_answer=[],
-            step_2_topper_answer=[],
+            good_answer_steps=[],
         ),
         top_value_additions=["Maintain structure"],
     )
@@ -147,9 +143,7 @@ def test_evaluations_endpoints_flow(client):
         conclusion_evaluation=ConclusionEvaluation(),
         knowledge_evaluation=KnowledgeEvaluation(),
         transformation_roadmap=TransformationRoadmap(
-            current_level_summary="Topper quality",
-            step_1_good_answer=[],
-            step_2_topper_answer=[],
+            good_answer_steps=[],
         ),
         top_value_additions=["Maintain structure"],
     )

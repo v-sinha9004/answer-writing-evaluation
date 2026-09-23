@@ -47,9 +47,7 @@ def sample_report():
         conclusion_evaluation=ConclusionEvaluation(conclusion_score=7.0),
         knowledge_evaluation=KnowledgeEvaluation(factual_accuracy_score=8.0),
         transformation_roadmap=TransformationRoadmap(
-            current_level_summary="Good standard",
-            step_1_good_answer=["Fix formatting"],
-            step_2_topper_answer=["Add maps"],
+            good_answer_steps=["Fix formatting"],
         ),
         top_value_additions=["Quote landmark commissions"],
         total_latency_seconds=3.42,

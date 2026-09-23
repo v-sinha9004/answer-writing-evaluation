@@ -500,20 +500,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3-Step Answer Transformation Roadmap */}
+              {/* Steps for a Good Answer */}
               {report.transformation_roadmap && (
                 <div>
-                  <h3 className="section-title">🚀 3-Step Answer Transformation Roadmap</h3>
+                  <h3 className="section-title">🚀 Steps for a Good Answer</h3>
                   <div className="roadmap-container">
-                    <div className="roadmap-summary">
-                      <strong>Current Assessment:</strong>{' '}
-                      <MarkdownText text={report.transformation_roadmap.current_level_summary} inline />
-                    </div>
-                    <div className="roadmap-columns">
+                    {report.transformation_roadmap.current_level_summary && (
+                      <div className="roadmap-summary">
+                        <strong>Current Assessment:</strong>{' '}
+                        <MarkdownText text={report.transformation_roadmap.current_level_summary} inline />
+                      </div>
+                    )}
+                    <div className={report.transformation_roadmap.step_2_topper_answer && report.transformation_roadmap.step_2_topper_answer.length > 0 ? "roadmap-columns" : "roadmap-single-column"}>
                       <div className="roadmap-col">
-                        <div className="col-header step1">Step 1: Fixes to reach 55% (Solid Answer)</div>
+                        <div className="col-header step1">Key Action Steps to Reach 55%+ (Solid Answer)</div>
                         <ul className="roadmap-list">
-                          {report.transformation_roadmap.step_1_good_answer?.map((item, idx) => (
+                          {(report.transformation_roadmap.good_answer_steps || report.transformation_roadmap.step_1_good_answer)?.map((item, idx) => (
                             <li key={idx} className="roadmap-item">
                               <span className="item-bullet">•</span>
                               <div className="roadmap-item-content">
@@ -524,19 +526,21 @@ export default function App() {
                         </ul>
                       </div>
 
-                      <div className="roadmap-col">
-                        <div className="col-header step2">Step 2: Additions to reach 70%+ (Topper Level)</div>
-                        <ul className="roadmap-list">
-                          {report.transformation_roadmap.step_2_topper_answer?.map((item, idx) => (
-                            <li key={idx} className="roadmap-item">
-                              <span className="item-bullet">•</span>
-                              <div className="roadmap-item-content">
-                                <MarkdownText text={item} />
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      {report.transformation_roadmap.step_2_topper_answer && report.transformation_roadmap.step_2_topper_answer.length > 0 && (
+                        <div className="roadmap-col">
+                          <div className="col-header step2">Step 2: Additions to reach 70%+ (Topper Level)</div>
+                          <ul className="roadmap-list">
+                            {report.transformation_roadmap.step_2_topper_answer?.map((item, idx) => (
+                              <li key={idx} className="roadmap-item">
+                                <span className="item-bullet">•</span>
+                                <div className="roadmap-item-content">
+                                  <MarkdownText text={item} />
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

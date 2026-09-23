@@ -48,13 +48,11 @@ def print_report(report: ComprehensiveEvaluationReport):
                 print(f"      Evidence  : {claim.grounded_evidence}")
 
     print("\n" + "-" * 80)
-    print(" 🚀 3-STEP ANSWER TRANSFORMATION ROADMAP:")
-    print(f" Current State : {report.transformation_roadmap.current_level_summary}")
-    print("\n [Step 1: Fixes to reach 55% marks (Solid Answer)]:")
-    for item in report.transformation_roadmap.step_1_good_answer:
-        print(f"   • {item}")
-    print("\n [Step 2: Additions to reach 70%+ marks (Topper Level)]:")
-    for item in report.transformation_roadmap.step_2_topper_answer:
+    print(" 🚀 STEPS FOR A GOOD ANSWER (55%+ MARKS):")
+    if report.transformation_roadmap.current_level_summary:
+        print(f" Current State : {report.transformation_roadmap.current_level_summary}")
+    steps = report.transformation_roadmap.good_answer_steps or report.transformation_roadmap.step_1_good_answer or []
+    for item in steps:
         print(f"   • {item}")
 
     print("\n" + "-" * 80)

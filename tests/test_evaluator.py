@@ -302,16 +302,10 @@ def test_orchestrator_parallel_mock_execution():
             new=AsyncMock(
                 return_value=(
                     ArbiterSynthesis(
-                        current_level_summary="Current Level: 6.2 / 15 Marks (41.3% - Average Baseline Attempt)",
-                        step_1_good_answer=[
+                        good_answer_steps=[
                             "Fix English newspaper chronology (Bengal Gazette 1780 vs The Hindu 1878).",
                             "Adopt bold-prefixed bullet points under existing headings.",
                             "Adopt the provided Model Introduction rewrite.",
-                        ],
-                        step_2_topper_answer=[
-                            "Structure the impact section into the 3 distinct phases (Moderate, Swadeshi, Gandhian).",
-                            "Cite Charles Metcalfe's 1835 Act and Tilak's Section 124A trial.",
-                            "Conclude with the Article 19(1)(a) freedom of speech bridge.",
                         ],
                         top_value_additions=[
                             "Replace opening with the 30-word Model Introduction.",
@@ -338,8 +332,10 @@ def test_orchestrator_parallel_mock_execution():
             assert isinstance(report, ComprehensiveEvaluationReport)
             assert report.scorecard.max_marks == 15
             assert report.scorecard.total_score > 0
+            assert len(report.transformation_roadmap.good_answer_steps) == 3
             assert len(report.transformation_roadmap.step_1_good_answer) == 3
-            assert len(report.transformation_roadmap.step_2_topper_answer) == 3
+            assert report.transformation_roadmap.step_2_topper_answer is None
+            assert report.transformation_roadmap.current_level_summary is None
             assert len(report.top_value_additions) == 3
             assert len(report.knowledge_evaluation.claims_checked) == 2
             assert report.intro_evaluation.model_intro_rewrite != ""
@@ -579,7 +575,8 @@ async def test_vision_ocr_agent_structured_parsing(tmp_path):
     from src.evaluator.schemas import EvaluationInput
 
     assert VisionOCRAgent is PDFProcessor
-    processor = VisionOCRAgent()
+    mock_openai = MagicMock()
+    processor = VisionOCRAgent(client=mock_openai)
     assert processor.process_pdf == processor.vision_ocr
 
     # Verify structured response validation
@@ -640,7 +637,8 @@ async def test_vision_ocr_agent_omitted_intro_conclusion(tmp_path):
     from src.evaluator.pdf_processor import VisionOCRAgent, UPSCAnswerOCRResponse
     from src.evaluator.schemas import EvaluationInput
 
-    processor = VisionOCRAgent()
+    mock_openai = MagicMock()
+    processor = VisionOCRAgent(client=mock_openai)
 
     # OCR detected that candidate skipped intro and conclusion
     ocr_resp = UPSCAnswerOCRResponse(

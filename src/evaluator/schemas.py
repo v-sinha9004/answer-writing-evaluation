@@ -1,7 +1,7 @@
 """Data models and typed contracts for the UPSC Multi-Agent Evaluation Engine."""
 
 from typing import List, Optional, Literal, Dict, Any, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ActionableImprovement(BaseModel):
@@ -206,10 +206,27 @@ class ConsolidatedScorecard(BaseModel):
 
 
 class TransformationRoadmap(BaseModel):
-    """3-step progressive blueprint to transform candidate's answer into topper quality."""
-    current_level_summary: str = Field(description="Realistic diagnosis of the answer's current state")
-    step_1_good_answer: List[str] = Field(description="Key fixes to push this answer to a solid 55% mark")
-    step_2_topper_answer: List[str] = Field(description="High-yield enhancements to push this answer to 70%+ (Topper)")
+    """Progressive roadmap to elevate candidate's answer quality."""
+    good_answer_steps: List[str] = Field(
+        default_factory=list,
+        description="Key concrete steps required to elevate this answer to a solid, competitive UPSC standard (55%+ marks)",
+    )
+    step_1_good_answer: Optional[List[str]] = Field(
+        default=None,
+        description="Deprecated alias; replaced by good_answer_steps",
+    )
+    current_level_summary: Optional[str] = Field(default=None, description="Deprecated; formerly diagnosis of the answer's current state")
+    step_2_topper_answer: Optional[List[str]] = Field(default=None, description="Deprecated; formerly additions to reach topper level")
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_good_answer_steps(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "good_answer_steps" not in data and "step_1_good_answer" in data:
+                data["good_answer_steps"] = data.get("step_1_good_answer") or []
+            elif "step_1_good_answer" not in data and "good_answer_steps" in data:
+                data["step_1_good_answer"] = data.get("good_answer_steps") or []
+        return data
 
 
 class ComprehensiveEvaluationReport(BaseModel):
