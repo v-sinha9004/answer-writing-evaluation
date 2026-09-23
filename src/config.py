@@ -11,6 +11,18 @@ load_dotenv(dotenv_path=ROOT_DIR / ".env")
 # OpenAI Settings
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# Langfuse Observability Settings
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+LANGFUSE_HOST = (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL") or "https://cloud.langfuse.com").strip()
+# Ensure both env vars are populated for Langfuse SDK
+os.environ["LANGFUSE_HOST"] = LANGFUSE_HOST
+os.environ["LANGFUSE_BASEURL"] = LANGFUSE_HOST
+
+def is_langfuse_enabled() -> bool:
+    """Check if Langfuse credentials are configured."""
+    return bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY)
+
 # Default Agent Model
 _env_model = (os.getenv("OPENAI_MODEL") or os.getenv("AGENT_MODEL") or os.getenv("EVALUATION_MODEL") or "").strip()
 OPENAI_MODEL = _env_model if _env_model else "gpt-4o"

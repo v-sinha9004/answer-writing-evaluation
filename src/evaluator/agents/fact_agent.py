@@ -4,6 +4,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 from src.config import FACT_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
+from src.evaluator.observability import observe_stage
 from src.evaluator.schemas import EvaluationInput, KnowledgeEvaluation, FactualClaimCheck, ActionableImprovement, TokenUsage
 from src.evaluator.prompts import FACT_EXTRACTION_PROMPT, FACT_VERIFICATION_PROMPT
 from src.rag.retriever import get_retriever, HybridRetriever
@@ -29,6 +30,36 @@ class FactAgent(BaseAgent):
         except Exception:
             return None
 
+    @observe_stage(name="rag_hybrid_retrieval", as_type="retriever")
+    def _retrieve_grounded_context(self, claims: List[str]) -> str:
+        """Retrieve authentic passages from Hybrid RAG for extracted candidate claims."""
+        retriever = self._get_retriever()
+        grounded_contexts: List[str] = []
+
+        if retriever and claims:
+            seen_chunk_ids = set()
+            for claim in claims[:5]:
+                try:
+                    search_results = retriever.search(query=claim, top_k=2)
+                    for res in search_results:
+                        cid = res.chunk.id
+                        if cid not in seen_chunk_ids:
+                            seen_chunk_ids.add(cid)
+                            meta = res.chunk.metadata
+                            grounded_contexts.append(
+                                f"--- [Source: {meta.source_file} | Chapter: {meta.chapter_title} | Page: {meta.page_number}] ---\n"
+                                f"{res.chunk.content.strip()}"
+                            )
+                except Exception:
+                    continue
+
+        return (
+            "\n\n".join(grounded_contexts)
+            if grounded_contexts
+            else "[Note: Local RAG passages unavailable or unindexed. Verify against standard GS-1 Modern History facts.]"
+        )
+
+    @observe_stage(name="fact_agent", as_type="agent")
     async def evaluate(self, input_data: EvaluationInput) -> KnowledgeEvaluation:
         body_text = (input_data.full_markdown_text or "").strip()
 
@@ -73,31 +104,7 @@ Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
             claims = []
 
         # Step 2: Retrieve grounded context from Hybrid RAG for each claim
-        retriever = self._get_retriever()
-        grounded_contexts: List[str] = []
-
-        if retriever and claims:
-            seen_chunk_ids = set()
-            for claim in claims[:5]:
-                try:
-                    search_results = retriever.search(query=claim, top_k=2)
-                    for res in search_results:
-                        cid = res.chunk.id
-                        if cid not in seen_chunk_ids:
-                            seen_chunk_ids.add(cid)
-                            meta = res.chunk.metadata
-                            grounded_contexts.append(
-                                f"--- [Source: {meta.source_file} | Chapter: {meta.chapter_title} | Page: {meta.page_number}] ---\n"
-                                f"{res.chunk.content.strip()}"
-                            )
-                except Exception:
-                    continue
-
-        context_block = (
-            "\n\n".join(grounded_contexts)
-            if grounded_contexts
-            else "[Note: Local RAG passages unavailable or unindexed. Verify against standard GS-1 Modern History facts.]"
-        )
+        context_block = self._retrieve_grounded_context(claims)
 
         # Step 3: Verify claims against reference passages
         verification_user_prompt = f"""VERIFY THE CANDIDATE'S FACTUAL CLAIMS AGAINST THE GROUNDED REFERENCE TEXT:

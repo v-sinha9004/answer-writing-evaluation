@@ -9,6 +9,7 @@ import pypdf
 from PIL import Image
 from openai import AsyncOpenAI
 from src.config import OPENAI_API_KEY, VISION_AGENT_MODEL
+from src.evaluator.observability import get_async_openai_client, observe_stage
 from src.evaluator.schemas import EvaluationInput
 
 logger = logging.getLogger("upsc-ocr")
@@ -18,7 +19,7 @@ class PDFProcessor:
     """Extracts candidate answer text from digital or scanned handwritten PDFs."""
 
     def __init__(self, client: Optional[AsyncOpenAI] = None, model: Optional[str] = None):
-        self.client = client or AsyncOpenAI(api_key=OPENAI_API_KEY or "sk-dummy-key-for-testing")
+        self.client = client or get_async_openai_client()
         self.model = model or VISION_AGENT_MODEL
 
     def render_pdf_pages_to_images(self, pdf_bytes: bytes, max_pages: int = 6) -> List[bytes]:
@@ -84,6 +85,7 @@ class PDFProcessor:
 
         return full_text, images
 
+    @observe_stage(name="vision_transcription", as_type="generation")
     async def transcribe_images_with_vision(self, images: List[bytes]) -> str:
         """Transcribe handwritten pages into structured markdown using vision model."""
         if not images:
@@ -122,6 +124,7 @@ class PDFProcessor:
         logger.info(f"Vision transcription succeeded with {len(transcription.split())} words.")
         return transcription
 
+    @observe_stage(name="pdf_processing", as_type="span")
     async def process_pdf(
         self,
         pdf_bytes: bytes,

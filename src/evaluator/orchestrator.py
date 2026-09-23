@@ -22,6 +22,12 @@ from src.evaluator.agents.structure_agent import StructureAgent
 from src.evaluator.agents.conclusion_agent import ConclusionAgent
 from src.evaluator.agents.fact_agent import FactAgent
 from src.evaluator.agents.master_arbiter import MasterScoringAgent
+from src.evaluator.observability import (
+    observe_stage,
+    get_current_trace_id,
+    get_current_trace_url,
+    flush_observability,
+)
 from src.config import (
     AGENT_MODEL,
     DEMAND_AGENT_MODEL,
@@ -150,8 +156,11 @@ class EvaluationOrchestrator:
             top_value_additions=["Submit a legible copy with handwritten or typed answer text."],
             total_latency_seconds=elapsed,
             is_empty_submission=True,
+            trace_id=get_current_trace_id(),
+            trace_url=get_current_trace_url(),
         )
 
+    @observe_stage(name="evaluate_upsc_answer")
     async def evaluate(self, input_payload: Union[Dict[str, Any], EvaluationInput]) -> ComprehensiveEvaluationReport:
         """Run end-to-end multi-agent evaluation on the input answer."""
         start_time = time.perf_counter()
@@ -201,5 +210,10 @@ class EvaluationOrchestrator:
             fact_eval=fact_res,
             total_latency_seconds=total_latency,
         )
+
+        # Attach observability metadata
+        final_report.trace_id = get_current_trace_id()
+        final_report.trace_url = get_current_trace_url()
+        flush_observability()
 
         return final_report

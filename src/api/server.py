@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.evaluator.orchestrator import EvaluationOrchestrator
 from src.evaluator.pdf_processor import PDFProcessor
 from src.evaluator.schemas import ComprehensiveEvaluationReport, EvaluationInput
+from src.evaluator.observability import observe_stage
 from src.config import DATA_DIR, ROOT_DIR, ensure_directories
 from src.db.repository import (
     init_db,
@@ -21,6 +22,12 @@ from src.db.repository import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("upsc-api")
+
+
+@observe_stage(name="database_persistence", as_type="span")
+def persist_report_to_db(input_data, report, filename: str) -> str:
+    """Persist evaluation to SQLite database within an observed span."""
+    return save_evaluation(input_data=input_data, report=report, filename=filename)
 
 
 @asynccontextmanager
@@ -96,12 +103,15 @@ async def evaluate_pdf(
         # Persist evaluation to database only if content was actually evaluated
         if not report.is_empty_submission:
             try:
-                eval_id = save_evaluation(input_data=input_data, report=report, filename=filename)
+                eval_id = persist_report_to_db(input_data=input_data, report=report, filename=filename)
                 logger.info(f"Persisted evaluation to database with ID: {eval_id}")
             except Exception as db_err:
                 logger.error(f"Failed to persist evaluation to database: {db_err}", exc_info=True)
         else:
             logger.warning(f"Submission '{filename}' was empty or OCR found no text. Skipping DB persistence.")
+
+        if report.trace_url:
+            logger.info(f"Langfuse trace available at: {report.trace_url}")
 
         return report
 
@@ -133,7 +143,7 @@ async def evaluate_sample(
     # Persist sample evaluation to database
     try:
         input_data = EvaluationInput.model_validate(payload)
-        eval_id = save_evaluation(
+        eval_id = persist_report_to_db(
             input_data=input_data,
             report=report,
             filename="sample_ocr_press_in_india.json",
@@ -141,6 +151,9 @@ async def evaluate_sample(
         logger.info(f"Persisted sample evaluation to database with ID: {eval_id}")
     except Exception as db_err:
         logger.error(f"Failed to persist sample evaluation to database: {db_err}", exc_info=True)
+
+    if report.trace_url:
+        logger.info(f"Langfuse trace available at: {report.trace_url}")
 
     return report
 

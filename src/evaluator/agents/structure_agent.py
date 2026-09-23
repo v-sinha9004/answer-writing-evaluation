@@ -3,6 +3,7 @@
 from typing import Optional
 from src.config import STRUCTURE_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
+from src.evaluator.observability import observe_stage
 from src.evaluator.schemas import EvaluationInput, StructureEvaluation, ActionableImprovement
 from src.evaluator.prompts import STRUCTURE_SYSTEM_PROMPT
 
@@ -13,6 +14,7 @@ class StructureAgent(BaseAgent):
     def __init__(self, model: Optional[str] = None, **kwargs):
         super().__init__(model=model or STRUCTURE_AGENT_MODEL, **kwargs)
 
+    @observe_stage(name="structure_agent", as_type="agent")
     async def evaluate(self, input_data: EvaluationInput) -> StructureEvaluation:
         body_text = (input_data.full_markdown_text or "").strip()
 

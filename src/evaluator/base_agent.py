@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from src.config import OPENAI_API_KEY, AGENT_MODEL
-
+from src.evaluator.observability import get_async_openai_client, observe_stage
 from src.evaluator.schemas import TokenUsage
 
 T = TypeVar("T", bound=BaseModel)
@@ -17,7 +17,7 @@ class BaseAgent:
     """Base class for isolated specialist evaluator agents."""
 
     def __init__(self, model: Optional[str] = None, client: Optional[AsyncOpenAI] = None):
-        self.client = client or AsyncOpenAI(api_key=OPENAI_API_KEY or "sk-dummy-key-for-testing")
+        self.client = client or get_async_openai_client()
         self.model = model or AGENT_MODEL
 
     @retry(

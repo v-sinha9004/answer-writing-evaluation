@@ -3,6 +3,7 @@
 from typing import Optional
 from src.config import INTRO_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
+from src.evaluator.observability import observe_stage
 from src.evaluator.schemas import EvaluationInput, IntroEvaluation, ActionableImprovement
 from src.evaluator.prompts import INTRO_SYSTEM_PROMPT
 
@@ -13,6 +14,7 @@ class IntroAgent(BaseAgent):
     def __init__(self, model: Optional[str] = None, **kwargs):
         super().__init__(model=model or INTRO_AGENT_MODEL, **kwargs)
 
+    @observe_stage(name="intro_agent", as_type="agent")
     async def evaluate(self, input_data: EvaluationInput) -> IntroEvaluation:
         intro_text = (input_data.detected_intro or "").strip()
 

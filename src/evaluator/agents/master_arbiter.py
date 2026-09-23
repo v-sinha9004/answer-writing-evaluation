@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from src.evaluator.base_agent import BaseAgent
+from src.evaluator.observability import observe_stage
 from src.evaluator.schemas import (
     EvaluationInput,
     ComprehensiveEvaluationReport,
@@ -165,6 +166,7 @@ class MasterScoringAgent(BaseAgent):
             penalties_applied=penalties,
         )
 
+    @observe_stage(name="master_arbiter_synthesis", as_type="evaluator")
     async def synthesize(
         self,
         input_data: EvaluationInput,

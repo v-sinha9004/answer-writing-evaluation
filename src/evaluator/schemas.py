@@ -216,3 +216,5 @@ class ComprehensiveEvaluationReport(BaseModel):
     token_usage_breakdown: Dict[str, TokenUsage] = Field(default_factory=dict, description="Input/Output token telemetry per agent")
     total_token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Total aggregated input/output tokens")
     is_empty_submission: bool = False
+    trace_id: Optional[str] = Field(default=None, description="Langfuse observability trace ID")
+    trace_url: Optional[str] = Field(default=None, description="Direct URL to trace in Langfuse dashboard")

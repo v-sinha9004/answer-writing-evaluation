@@ -15,7 +15,7 @@ export default function App() {
   const [marks, setMarks] = useState(15);
   const [showQuestionInput, setShowQuestionInput] = useState(false);
   const [questionText, setQuestionText] = useState('');
-  
+
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState(null);
@@ -279,7 +279,7 @@ export default function App() {
         <div className="brand">
           <div className="brand-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
           <span className="brand-name">CivilEval AI</span>
@@ -302,10 +302,6 @@ export default function App() {
             )}
           </button>
 
-          <div className="header-badge">
-            <span className="status-dot"></span>
-            <span>5-Agent Specialist Panel Active</span>
-          </div>
         </div>
       </header>
 
@@ -327,7 +323,7 @@ export default function App() {
               <div className="pulse-spinner"></div>
               <h2 className="loading-title">Evaluating Answer Copy...</h2>
               <p className="loading-subtitle">The multi-agent panel is concurrently analyzing your submission</p>
-              
+
               <div className="pipeline-steps">
                 <div className={`pipeline-step ${loadingStep >= 0 ? 'active' : ''}`}>
                   <span className="step-icon">📄</span>
@@ -375,6 +371,21 @@ export default function App() {
                     <span>Past Evaluations ({evaluationsList.length})</span>
                   </button>
                   <span className="time-badge">Evaluated in {report.total_latency_seconds}s</span>
+                  {report.trace_url && (
+                    <a
+                      href={report.trace_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="langfuse-trace-link"
+                      title="Inspect full execution trace in Langfuse dashboard"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      </svg>
+                      <span>Langfuse Trace ↗</span>
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -550,9 +561,8 @@ export default function App() {
                       <div key={idx} className="fact-item">
                         <div className="fact-top">
                           <span
-                            className={`fact-verdict ${
-                              claim.verdict === 'VERIFIED' ? 'verified' : 'incorrect'
-                            }`}
+                            className={`fact-verdict ${claim.verdict === 'VERIFIED' ? 'verified' : 'incorrect'
+                              }`}
                           >
                             {claim.verdict}
                           </span>
