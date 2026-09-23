@@ -545,7 +545,7 @@ export default function App() {
               {/* Top Value Additions */}
               {report.top_value_additions && report.top_value_additions.length > 0 && (
                 <div>
-                  <h3 className="section-title">💡 Top Value Additions (+1.5 Marks Boosters)</h3>
+                  <h3 className="section-title">💡 Top Value Additions</h3>
                   <div className="value-additions-grid">
                     {report.top_value_additions.map((va, idx) => (
                       <div key={idx} className="va-card">
