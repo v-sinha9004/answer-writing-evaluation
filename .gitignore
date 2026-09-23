@@ -30,9 +30,6 @@ ENV/
 .env
 .env.local
 
-# Databases and RAG persistence
-data/chromadb/
-data/bm25/
 
 # Testing
 .pytest_cache/
