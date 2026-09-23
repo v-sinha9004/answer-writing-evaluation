@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import MarkdownText from './components/MarkdownText';
 import './App.css';
 
 const PAPERS = [
@@ -440,7 +441,9 @@ export default function App() {
               {/* Executive Examiner Verdict */}
               <div className="verdict-callout">
                 <div className="verdict-callout-title">🏛️ Executive Examiner Verdict</div>
-                <div className="verdict-callout-text">"{report.executive_summary}"</div>
+                <div className="verdict-callout-text">
+                  <MarkdownText text={report.executive_summary} />
+                </div>
               </div>
 
               {/* 5-Parameter Dimension Breakdown */}
@@ -482,7 +485,9 @@ export default function App() {
                         {copiedType === 'intro' ? 'Copied!' : 'Copy'}
                       </button>
                     </div>
-                    <p className="rewrite-body">{report.intro_evaluation.model_intro_rewrite || 'N/A'}</p>
+                    <div className="rewrite-body">
+                      <MarkdownText text={report.intro_evaluation.model_intro_rewrite || 'N/A'} />
+                    </div>
                   </div>
 
                   <div className="rewrite-card">
@@ -495,7 +500,9 @@ export default function App() {
                         {copiedType === 'conclusion' ? 'Copied!' : 'Copy'}
                       </button>
                     </div>
-                    <p className="rewrite-body">{report.conclusion_evaluation.model_conclusion_rewrite || 'N/A'}</p>
+                    <div className="rewrite-body">
+                      <MarkdownText text={report.conclusion_evaluation.model_conclusion_rewrite || 'N/A'} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -506,7 +513,8 @@ export default function App() {
                   <h3 className="section-title">🚀 3-Step Answer Transformation Roadmap</h3>
                   <div className="roadmap-container">
                     <div className="roadmap-summary">
-                      <strong>Current Assessment:</strong> {report.transformation_roadmap.current_level_summary}
+                      <strong>Current Assessment:</strong>{' '}
+                      <MarkdownText text={report.transformation_roadmap.current_level_summary} inline />
                     </div>
                     <div className="roadmap-columns">
                       <div className="roadmap-col">
@@ -515,7 +523,9 @@ export default function App() {
                           {report.transformation_roadmap.step_1_good_answer?.map((item, idx) => (
                             <li key={idx} className="roadmap-item">
                               <span className="item-bullet">•</span>
-                              <span>{item}</span>
+                              <div className="roadmap-item-content">
+                                <MarkdownText text={item} />
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -527,7 +537,9 @@ export default function App() {
                           {report.transformation_roadmap.step_2_topper_answer?.map((item, idx) => (
                             <li key={idx} className="roadmap-item">
                               <span className="item-bullet">•</span>
-                              <span>{item}</span>
+                              <div className="roadmap-item-content">
+                                <MarkdownText text={item} />
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -545,7 +557,9 @@ export default function App() {
                     {report.top_value_additions.map((va, idx) => (
                       <div key={idx} className="va-card">
                         <div className="va-number">{idx + 1}</div>
-                        <div className="va-text">{va}</div>
+                        <div className="va-text">
+                          <MarkdownText text={va} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -566,16 +580,21 @@ export default function App() {
                           >
                             {claim.verdict}
                           </span>
-                          <span className="fact-claim">"{claim.claim}"</span>
+                          <span className="fact-claim">
+                            "<MarkdownText text={claim.claim} inline />"
+                          </span>
                         </div>
                         {claim.correction && (
                           <div className="fact-correction">
-                            <strong>Correction:</strong> {claim.correction}
+                            <strong>Correction:</strong>{' '}
+                            <MarkdownText text={claim.correction} inline />
                           </div>
                         )}
                         {claim.grounded_evidence && (
                           <div className="fact-evidence">
-                            <strong>Evidence:</strong> {claim.grounded_evidence} {claim.source_citation && `(${claim.source_citation})`}
+                            <strong>Evidence:</strong>{' '}
+                            <MarkdownText text={claim.grounded_evidence} inline />
+                            {claim.source_citation && ` (${claim.source_citation})`}
                           </div>
                         )}
                       </div>
@@ -595,10 +614,16 @@ export default function App() {
                           <span className="imp-section">{imp.section}</span>
                           <span className="imp-impact">⚠️ {imp.mark_impact}</span>
                         </div>
-                        <div className="imp-issue">{imp.issue_detected}</div>
-                        <div className="imp-prescription">{imp.prescription}</div>
+                        <div className="imp-issue">
+                          <MarkdownText text={imp.issue_detected} inline />
+                        </div>
+                        <div className="imp-prescription">
+                          <MarkdownText text={imp.prescription} />
+                        </div>
                         {imp.plug_and_play_snippet && (
-                          <div className="imp-snippet">{imp.plug_and_play_snippet}</div>
+                          <div className="imp-snippet">
+                            <MarkdownText text={imp.plug_and_play_snippet} />
+                          </div>
                         )}
                       </div>
                     ))}
