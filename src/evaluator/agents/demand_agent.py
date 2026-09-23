@@ -43,8 +43,10 @@ class DemandAgent(BaseAgent):
 
 Analyze explicit and implicit demands, check directive adherence, score rigorously, and prescribe concrete improvements.
 """
-        return await self.run_structured(
+        result, usage = await self.run_structured_with_usage(
             system_prompt=DEMAND_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_format=DemandEvaluation,
         )
+        result.token_usage = usage
+        return result

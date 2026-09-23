@@ -64,6 +64,18 @@ def print_report(report: ComprehensiveEvaluationReport):
     print(" 💡 TOP 3 VALUE ADDITIONS (+1.5 MARK BOOSTERS):")
     for idx, va in enumerate(report.top_value_additions, start=1):
         print(f"   {idx}. {va}")
+
+    if report.token_usage_breakdown:
+        print("\n" + "-" * 80)
+        print(" 🎫 TOKEN TELEMETRY PER AGENT:")
+        print(f"   {'Specialist Agent':<33} {'Input (Prompt)':>14} {'Output (Gen)':>14} {'Total':>10}")
+        print("   " + "-" * 75)
+        for agent_name, usage in report.token_usage_breakdown.items():
+            print(f"   • {agent_name:<31} : {usage.prompt_tokens:>12,d} {usage.completion_tokens:>12,d} {usage.total_tokens:>9,d}")
+        print("   " + "-" * 75)
+        tot = report.total_token_usage
+        print(f"     {'TOTAL CONSUMPTION':<31} : {tot.prompt_tokens:>12,d} {tot.completion_tokens:>12,d} {tot.total_tokens:>9,d}")
+
     print(border + "\n")
 
 

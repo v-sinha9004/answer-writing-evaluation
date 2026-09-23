@@ -38,8 +38,10 @@ class IntroAgent(BaseAgent):
 Check conciseness (30-40 words), definition/origin grounding, relevance, and craft an improved model_intro_rewrite.
 """
 
-        return await self.run_structured(
+        result, usage = await self.run_structured_with_usage(
             system_prompt=INTRO_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_format=IntroEvaluation,
         )
+        result.token_usage = usage
+        return result

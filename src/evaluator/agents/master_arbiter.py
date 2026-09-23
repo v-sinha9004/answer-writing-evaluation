@@ -14,6 +14,7 @@ from src.evaluator.schemas import (
     StructureEvaluation,
     ConclusionEvaluation,
     KnowledgeEvaluation,
+    TokenUsage,
 )
 from src.evaluator.prompts import MASTER_ARBITER_PROMPT
 
@@ -221,8 +222,9 @@ Provide:
 3. Exactly top 3 high-impact value additions (+1.5 mark boosters).
 """
 
+        master_usage = TokenUsage()
         try:
-            synthesis = await self.run_structured(
+            synthesis, master_usage = await self.run_structured_with_usage(
                 system_prompt=MASTER_ARBITER_PROMPT,
                 user_prompt=user_prompt,
                 response_format=ArbiterSynthesis,
@@ -254,6 +256,23 @@ Provide:
                 "Conclude with constitutional/policy relevance.",
             ]
 
+        # Consolidate per-agent token telemetry
+        token_breakdown = {
+            "Demand & Directive Agent": demand_eval.token_usage,
+            "Introduction Agent": intro_eval.token_usage,
+            "Structure & Presentation Agent": structure_eval.token_usage,
+            "Conclusion & Way Forward Agent": conclusion_eval.token_usage,
+            "Knowledge & Fact Agent (RAG)": fact_eval.token_usage,
+            "Master Scoring Arbiter": master_usage,
+        }
+        total_prompt = sum(u.prompt_tokens for u in token_breakdown.values())
+        total_completion = sum(u.completion_tokens for u in token_breakdown.values())
+        total_usage = TokenUsage(
+            prompt_tokens=total_prompt,
+            completion_tokens=total_completion,
+            total_tokens=total_prompt + total_completion,
+        )
+
         return ComprehensiveEvaluationReport(
             scorecard=scorecard,
             executive_summary=exec_summary,
@@ -265,5 +284,7 @@ Provide:
             transformation_roadmap=roadmap,
             top_value_additions=value_additions,
             total_latency_seconds=total_latency_seconds,
+            token_usage_breakdown=token_breakdown,
+            total_token_usage=total_usage,
             is_empty_submission=False,
         )

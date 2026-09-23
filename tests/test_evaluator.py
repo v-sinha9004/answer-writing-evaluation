@@ -15,6 +15,7 @@ from src.evaluator.schemas import (
     FactualClaimCheck,
     ActionableImprovement,
     TransformationRoadmap,
+    TokenUsage,
 )
 from src.evaluator.agents.master_arbiter import MasterScoringAgent, ArbiterSynthesis
 from src.evaluator.agents.demand_agent import DemandAgent
@@ -247,7 +248,8 @@ def test_orchestrator_parallel_mock_execution():
                     prescription="Group points under Moderate, Swadeshi, and Gandhian phases.",
                     plug_and_play_snippet="• **Moderate Phase**: Propagated Drain of Wealth theory...",
                 )
-            ]
+            ],
+            token_usage=TokenUsage(prompt_tokens=500, completion_tokens=150, total_tokens=650),
         )
 
         mock_intro = AsyncMock(spec=IntroAgent)
@@ -256,12 +258,14 @@ def test_orchestrator_parallel_mock_execution():
             intro_score=6.0,
             critique="Good mention of Hickey; add exact 1780 Bengal Gazette context.",
             model_intro_rewrite="Originating with James Augustus Hicky’s Bengal Gazette (1780), the Indian press evolved into the vanguard of nationalist consciousness.",
+            token_usage=TokenUsage(prompt_tokens=300, completion_tokens=100, total_tokens=400),
         )
 
         mock_structure = AsyncMock(spec=StructureAgent)
         mock_structure.evaluate.return_value = StructureEvaluation(
             structural_score=7.0,
             critique="Subheadings match prompt keywords; upgrade plain numbered points to bold keyword prefixes.",
+            token_usage=TokenUsage(prompt_tokens=400, completion_tokens=120, total_tokens=520),
         )
 
         mock_concl = AsyncMock(spec=ConclusionAgent)
@@ -270,6 +274,7 @@ def test_orchestrator_parallel_mock_execution():
             conclusion_score=5.5,
             critique="Good summary; bridge historical struggle to modern Article 19(1)(a).",
             model_conclusion_rewrite="Ultimately, the nationalist press served as a crucible for civil liberties, directly shaping the democratic bedrock of Article 19(1)(a).",
+            token_usage=TokenUsage(prompt_tokens=320, completion_tokens=110, total_tokens=430),
         )
 
         mock_fact = AsyncMock(spec=FactAgent)
@@ -288,31 +293,35 @@ def test_orchestrator_parallel_mock_execution():
                 ),
             ],
             syllabus_enrichments=["Charles Metcalfe (1835 Liberator of Press)", "Section 124A IPC Tilak Trial 1897"],
+            token_usage=TokenUsage(prompt_tokens=900, completion_tokens=250, total_tokens=1150),
         )
 
         arbiter = MasterScoringAgent()
         with patch.object(
             arbiter,
-            "run_structured",
+            "run_structured_with_usage",
             new=AsyncMock(
-                return_value=ArbiterSynthesis(
-                    executive_summary="Solid attempt with clear heading taxonomy, but suffers from chronological errors in early newspapers and lacks stage-wise grouping.",
-                    current_level_summary="Current Level: 6.2 / 15 Marks (41.3% - Average Baseline Attempt)",
-                    step_1_good_answer=[
-                        "Fix English newspaper chronology (Bengal Gazette 1780 vs The Hindu 1878).",
-                        "Adopt bold-prefixed bullet points under existing headings.",
-                        "Adopt the provided Model Introduction rewrite.",
-                    ],
-                    step_2_topper_answer=[
-                        "Structure the impact section into the 3 distinct phases (Moderate, Swadeshi, Gandhian).",
-                        "Cite Charles Metcalfe's 1835 Act and Tilak's Section 124A trial.",
-                        "Conclude with the Article 19(1)(a) freedom of speech bridge.",
-                    ],
-                    top_value_additions=[
-                        "Replace opening with the 30-word Model Introduction.",
-                        "Organize freedom struggle impact chronologically across 3 phases.",
-                        "Adopt the Model Conclusion linking to Article 19(1)(a).",
-                    ],
+                return_value=(
+                    ArbiterSynthesis(
+                        executive_summary="Solid attempt with clear heading taxonomy, but suffers from chronological errors in early newspapers and lacks stage-wise grouping.",
+                        current_level_summary="Current Level: 6.2 / 15 Marks (41.3% - Average Baseline Attempt)",
+                        step_1_good_answer=[
+                            "Fix English newspaper chronology (Bengal Gazette 1780 vs The Hindu 1878).",
+                            "Adopt bold-prefixed bullet points under existing headings.",
+                            "Adopt the provided Model Introduction rewrite.",
+                        ],
+                        step_2_topper_answer=[
+                            "Structure the impact section into the 3 distinct phases (Moderate, Swadeshi, Gandhian).",
+                            "Cite Charles Metcalfe's 1835 Act and Tilak's Section 124A trial.",
+                            "Conclude with the Article 19(1)(a) freedom of speech bridge.",
+                        ],
+                        top_value_additions=[
+                            "Replace opening with the 30-word Model Introduction.",
+                            "Organize freedom struggle impact chronologically across 3 phases.",
+                            "Adopt the Model Conclusion linking to Article 19(1)(a).",
+                        ],
+                    ),
+                    TokenUsage(prompt_tokens=800, completion_tokens=300, total_tokens=1100),
                 )
             ),
         ):
@@ -338,6 +347,15 @@ def test_orchestrator_parallel_mock_execution():
             assert len(report.knowledge_evaluation.claims_checked) == 2
             assert report.intro_evaluation.model_intro_rewrite != ""
             assert report.conclusion_evaluation.model_conclusion_rewrite != ""
+
+            # Token Telemetry Assertions
+            assert len(report.token_usage_breakdown) == 6
+            assert report.token_usage_breakdown["Demand & Directive Agent"].prompt_tokens == 500
+            assert report.token_usage_breakdown["Knowledge & Fact Agent (RAG)"].completion_tokens == 250
+            assert report.token_usage_breakdown["Master Scoring Arbiter"].total_tokens == 1100
+            assert report.total_token_usage.prompt_tokens == 500 + 300 + 400 + 320 + 900 + 800
+            assert report.total_token_usage.completion_tokens == 150 + 100 + 120 + 110 + 250 + 300
+            assert report.total_token_usage.total_tokens == report.total_token_usage.prompt_tokens + report.total_token_usage.completion_tokens
 
             # Verify all 5 agents were awaited
             mock_demand.evaluate.assert_awaited_once()
@@ -392,7 +410,14 @@ def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
             critique="Accurate historical claim grounded in reference store.",
         )
 
-        with patch.object(fact_agent, "run_structured", side_effect=[extracted_mock, verified_mock]) as mock_call:
+        mock_usage_1 = TokenUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+        mock_usage_2 = TokenUsage(prompt_tokens=200, completion_tokens=80, total_tokens=280)
+
+        with patch.object(
+            fact_agent,
+            "run_structured_with_usage",
+            side_effect=[(extracted_mock, mock_usage_1), (verified_mock, mock_usage_2)],
+        ) as mock_call:
             input_data = EvaluationInput(
                 question_text="Examine tribal uprisings with reference to Santhal rebellion.",
                 question_marks=10,
@@ -404,7 +429,10 @@ def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
             assert len(result.claims_checked) == 1
             assert result.claims_checked[0].verdict == "VERIFIED"
             assert "Damin-i-Koh" in result.syllabus_enrichments[0]
-            # Ensure run_structured was called twice (extraction + verification)
+            assert result.token_usage.prompt_tokens == 300
+            assert result.token_usage.completion_tokens == 130
+            assert result.token_usage.total_tokens == 430
+            # Ensure run_structured_with_usage was called twice (extraction + verification)
             assert mock_call.call_count == 2
 
     asyncio.run(_run())

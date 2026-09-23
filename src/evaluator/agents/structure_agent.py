@@ -41,8 +41,10 @@ Inspect use of subheadings, bullet discipline, bold keyword prefixes, and readab
 Prescribe clear formatting upgrades with plug-and-play restructuring examples.
 """
 
-        return await self.run_structured(
+        result, usage = await self.run_structured_with_usage(
             system_prompt=STRUCTURE_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_format=StructureEvaluation,
         )
+        result.token_usage = usage
+        return result

@@ -3,7 +3,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from src.evaluator.base_agent import BaseAgent
-from src.evaluator.schemas import EvaluationInput, KnowledgeEvaluation, FactualClaimCheck, ActionableImprovement
+from src.evaluator.schemas import EvaluationInput, KnowledgeEvaluation, FactualClaimCheck, ActionableImprovement, TokenUsage
 from src.evaluator.prompts import FACT_EXTRACTION_PROMPT, FACT_VERIFICATION_PROMPT
 from src.rag.retriever import get_retriever, HybridRetriever
 
@@ -60,8 +60,9 @@ class FactAgent(BaseAgent):
 
 Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
 """
+        extraction_usage = TokenUsage()
         try:
-            extracted = await self.run_structured(
+            extracted, extraction_usage = await self.run_structured_with_usage(
                 system_prompt=FACT_EXTRACTION_PROMPT,
                 user_prompt=extraction_user_prompt,
                 response_format=ExtractedClaims,
@@ -122,8 +123,17 @@ For each claim:
 5. Provide ActionableImprovement items with ready-to-insert corrections.
 """
 
-        return await self.run_structured(
+        result, verification_usage = await self.run_structured_with_usage(
             system_prompt=FACT_VERIFICATION_PROMPT,
             user_prompt=verification_user_prompt,
             response_format=KnowledgeEvaluation,
         )
+
+        total_prompt = extraction_usage.prompt_tokens + verification_usage.prompt_tokens
+        total_completion = extraction_usage.completion_tokens + verification_usage.completion_tokens
+        result.token_usage = TokenUsage(
+            prompt_tokens=total_prompt,
+            completion_tokens=total_completion,
+            total_tokens=total_prompt + total_completion,
+        )
+        return result

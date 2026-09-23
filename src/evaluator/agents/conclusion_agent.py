@@ -38,8 +38,10 @@ class ConclusionAgent(BaseAgent):
 Check forward-looking outlook, synthesis, constitutional/policy grounding, and craft an improved model_conclusion_rewrite.
 """
 
-        return await self.run_structured(
+        result, usage = await self.run_structured_with_usage(
             system_prompt=CONCLUSION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_format=ConclusionEvaluation,
         )
+        result.token_usage = usage
+        return result
