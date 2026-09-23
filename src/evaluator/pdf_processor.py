@@ -6,15 +6,16 @@ import re
 from typing import Optional, Tuple, List
 import pypdf
 from openai import AsyncOpenAI
-from src.config import OPENAI_API_KEY
+from src.config import OPENAI_API_KEY, AGENT_MODEL
 from src.evaluator.schemas import EvaluationInput
 
 
 class PDFProcessor:
     """Extracts candidate answer text from digital or scanned handwritten PDFs."""
 
-    def __init__(self, client: Optional[AsyncOpenAI] = None):
+    def __init__(self, client: Optional[AsyncOpenAI] = None, model: Optional[str] = None):
         self.client = client or AsyncOpenAI(api_key=OPENAI_API_KEY or "sk-dummy-key-for-testing")
+        self.model = model or AGENT_MODEL
 
     def extract_text_and_images(self, pdf_bytes: bytes) -> Tuple[str, List[bytes]]:
         """Extract embedded text and any embedded page images from PDF bytes."""
@@ -66,7 +67,7 @@ class PDFProcessor:
             })
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o",
+            model=self.model,
             messages=[{"role": "user", "content": content_items}],
             temperature=0.0,
             max_tokens=2500,

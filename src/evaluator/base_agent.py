@@ -6,7 +6,7 @@ from typing import Type, TypeVar, Optional, Any
 from pydantic import BaseModel
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from src.config import OPENAI_API_KEY
+from src.config import OPENAI_API_KEY, AGENT_MODEL
 
 from src.evaluator.schemas import TokenUsage
 
@@ -18,7 +18,7 @@ class BaseAgent:
 
     def __init__(self, model: Optional[str] = None, client: Optional[AsyncOpenAI] = None):
         self.client = client or AsyncOpenAI(api_key=OPENAI_API_KEY or "sk-dummy-key-for-testing")
-        self.model = model or os.getenv("EVALUATION_MODEL", "gpt-4o")
+        self.model = model or AGENT_MODEL
 
     @retry(
         stop=stop_after_attempt(3),

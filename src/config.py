@@ -10,6 +10,9 @@ load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
 # OpenAI Settings
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", os.getenv("AGENT_MODEL", os.getenv("EVALUATION_MODEL", "gpt-4o")))
+AGENT_MODEL = OPENAI_MODEL
+EVALUATION_MODEL = OPENAI_MODEL
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 

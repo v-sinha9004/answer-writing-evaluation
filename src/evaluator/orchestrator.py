@@ -22,6 +22,7 @@ from src.evaluator.agents.structure_agent import StructureAgent
 from src.evaluator.agents.conclusion_agent import ConclusionAgent
 from src.evaluator.agents.fact_agent import FactAgent
 from src.evaluator.agents.master_arbiter import MasterScoringAgent
+from src.config import AGENT_MODEL
 
 
 class EvaluationOrchestrator:
@@ -35,13 +36,15 @@ class EvaluationOrchestrator:
         conclusion_agent: Optional[ConclusionAgent] = None,
         fact_agent: Optional[FactAgent] = None,
         master_arbiter: Optional[MasterScoringAgent] = None,
+        model: Optional[str] = None,
     ):
-        self.demand_agent = demand_agent or DemandAgent()
-        self.intro_agent = intro_agent or IntroAgent()
-        self.structure_agent = structure_agent or StructureAgent()
-        self.conclusion_agent = conclusion_agent or ConclusionAgent()
-        self.fact_agent = fact_agent or FactAgent()
-        self.master_arbiter = master_arbiter or MasterScoringAgent()
+        self.model = model or AGENT_MODEL
+        self.demand_agent = demand_agent or DemandAgent(model=self.model)
+        self.intro_agent = intro_agent or IntroAgent(model=self.model)
+        self.structure_agent = structure_agent or StructureAgent(model=self.model)
+        self.conclusion_agent = conclusion_agent or ConclusionAgent(model=self.model)
+        self.fact_agent = fact_agent or FactAgent(model=self.model)
+        self.master_arbiter = master_arbiter or MasterScoringAgent(model=self.model)
 
     def _handle_empty_submission(self, input_data: EvaluationInput, start_time: float) -> ComprehensiveEvaluationReport:
         """Short-circuit for empty answer sheets without incurring LLM API costs."""
