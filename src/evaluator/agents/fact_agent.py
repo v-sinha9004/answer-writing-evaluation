@@ -144,4 +144,5 @@ For each claim:
             completion_tokens=total_completion,
             total_tokens=total_prompt + total_completion,
         )
+        result.status = "SUCCESS"
         return result

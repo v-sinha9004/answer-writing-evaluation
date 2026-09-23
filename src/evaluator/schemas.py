@@ -51,7 +51,10 @@ class EvaluationInput(BaseModel):
 
 class DemandEvaluation(BaseModel):
     """Evaluation of question demand fulfillment and directive adherence."""
-    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
+        default="SUCCESS",
+        description="Technical execution status. Always 'SUCCESS' for completed evaluation."
+    )
     sub_parts_identified: List[str] = Field(default_factory=list, description="Explicit and implicit sub-demands")
     sub_parts_addressed: List[str] = Field(default_factory=list, description="Sub-demands adequately answered")
     unaddressed_sub_parts: List[str] = Field(default_factory=list, description="Sub-demands skipped or weak")
@@ -82,7 +85,10 @@ class DemandEvaluation(BaseModel):
 
 class IntroEvaluation(BaseModel):
     """Evaluation of the introduction's clarity, conciseness, and relevance."""
-    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
+        default="SUCCESS",
+        description="Technical execution status. Always 'SUCCESS' for completed evaluation."
+    )
     intro_present: bool = Field(default=True, description="Whether an introduction was detected")
     conciseness_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Word economy (ideal 30-40 words)")
     contextual_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Definition or historical origin grounding")
@@ -104,7 +110,10 @@ class IntroEvaluation(BaseModel):
 
 class StructureEvaluation(BaseModel):
     """Evaluation of heading taxonomy, bullet formatting, and argument flow."""
-    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
+        default="SUCCESS",
+        description="Technical execution status. Always 'SUCCESS' for completed evaluation."
+    )
     heading_taxonomy_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Use of clear question-aligned headers")
     bullet_discipline_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Use of bold keywords and bullets")
     structural_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Overall structure score 0-10")
@@ -123,7 +132,10 @@ class StructureEvaluation(BaseModel):
 
 class ConclusionEvaluation(BaseModel):
     """Evaluation of the conclusion's forward-looking perspective and constitutional grounding."""
-    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
+        default="SUCCESS",
+        description="Technical execution status. Always 'SUCCESS' for completed evaluation."
+    )
     conclusion_present: bool = Field(default=True, description="Whether a conclusion was detected")
     forward_looking_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Constructive Way Forward or legacy")
     balance_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Synthesis of arguments without repetition")
@@ -154,7 +166,10 @@ class FactualClaimCheck(BaseModel):
 
 class KnowledgeEvaluation(BaseModel):
     """Evaluation of factual accuracy grounded against reference knowledge store."""
-    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
+        default="SUCCESS",
+        description="Technical execution status. Always 'SUCCESS' for completed evaluation."
+    )
     claims_checked: List[FactualClaimCheck] = Field(default_factory=list)
     factual_accuracy_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Score 0-10 on factual precision")
     syllabus_enrichments: List[str] = Field(default_factory=list, description="Core syllabus terms/concepts to inject")

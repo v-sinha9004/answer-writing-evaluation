@@ -54,4 +54,5 @@ Prescribe clear formatting upgrades with plug-and-play restructuring examples.
             response_format=StructureEvaluation,
         )
         result.token_usage = usage
+        result.status = "SUCCESS"
         return result

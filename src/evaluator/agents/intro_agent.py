@@ -51,4 +51,5 @@ Check conciseness (30-40 words), definition/origin grounding, relevance, and cra
             response_format=IntroEvaluation,
         )
         result.token_usage = usage
+        result.status = "SUCCESS"
         return result

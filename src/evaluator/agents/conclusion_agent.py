@@ -51,4 +51,5 @@ Check forward-looking outlook, synthesis, constitutional/policy grounding, and c
             response_format=ConclusionEvaluation,
         )
         result.token_usage = usage
+        result.status = "SUCCESS"
         return result

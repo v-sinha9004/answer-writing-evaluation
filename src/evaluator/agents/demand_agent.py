@@ -56,4 +56,5 @@ Analyze explicit and implicit demands, check directive adherence, score rigorous
             response_format=DemandEvaluation,
         )
         result.token_usage = usage
+        result.status = "SUCCESS"
         return result

@@ -75,7 +75,16 @@ class MasterScoringAgent(BaseAgent):
                 "conclusion": conclusion_eval,
             }[dim]
 
-            if eval_obj.status != "FAILED":
+            # True pipeline failure occurs when an agent times out or crashes and activates fallback
+            is_pipeline_failure = (
+                eval_obj.status == "FAILED"
+                and (
+                    "fallback activated" in getattr(eval_obj, "critique", "").lower()
+                    or getattr(getattr(eval_obj, "token_usage", None), "total_tokens", 0) == 0
+                )
+            )
+
+            if not is_pipeline_failure:
                 active_weights[dim] = weight
 
         # If all failed (extreme rare fallback)
