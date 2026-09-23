@@ -560,38 +560,37 @@ export default function App() {
               )}
 
               {/* RAG Fact Check Audit */}
-              {report.knowledge_evaluation?.claims_checked && report.knowledge_evaluation.claims_checked.length > 0 && (
+              {report.knowledge_evaluation?.claims_checked?.filter((c) => c.verdict === 'INCORRECT').length > 0 && (
                 <div>
-                  <h3 className="section-title">🔍 Factual Accuracy Audit (RAG Grounded)</h3>
+                  <h3 className="section-title">🔍 Incorrect Facts</h3>
                   <div className="facts-list">
-                    {report.knowledge_evaluation.claims_checked.map((claim, idx) => (
-                      <div key={idx} className="fact-item">
-                        <div className="fact-top">
-                          <span
-                            className={`fact-verdict ${claim.verdict === 'VERIFIED' ? 'verified' : 'incorrect'
-                              }`}
-                          >
-                            {claim.verdict}
-                          </span>
-                          <span className="fact-claim">
-                            "<MarkdownText text={claim.claim} inline />"
-                          </span>
+                    {report.knowledge_evaluation.claims_checked
+                      .filter((claim) => claim.verdict === 'INCORRECT')
+                      .map((claim, idx) => (
+                        <div key={idx} className="fact-item">
+                          <div className="fact-top">
+                            <span className="fact-verdict incorrect">
+                              {claim.verdict}
+                            </span>
+                            <span className="fact-claim">
+                              "<MarkdownText text={claim.claim} inline />"
+                            </span>
+                          </div>
+                          {claim.correction && (
+                            <div className="fact-correction">
+                              <strong>Correction:</strong>{' '}
+                              <MarkdownText text={claim.correction} inline />
+                            </div>
+                          )}
+                          {claim.grounded_evidence && (
+                            <div className="fact-evidence">
+                              <strong>Evidence:</strong>{' '}
+                              <MarkdownText text={claim.grounded_evidence} inline />
+                              {claim.source_citation && ` (${claim.source_citation})`}
+                            </div>
+                          )}
                         </div>
-                        {claim.correction && (
-                          <div className="fact-correction">
-                            <strong>Correction:</strong>{' '}
-                            <MarkdownText text={claim.correction} inline />
-                          </div>
-                        )}
-                        {claim.grounded_evidence && (
-                          <div className="fact-evidence">
-                            <strong>Evidence:</strong>{' '}
-                            <MarkdownText text={claim.grounded_evidence} inline />
-                            {claim.source_citation && ` (${claim.source_citation})`}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               )}
