@@ -2,6 +2,7 @@
 
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from src.config import FACT_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
 from src.evaluator.schemas import EvaluationInput, KnowledgeEvaluation, FactualClaimCheck, ActionableImprovement, TokenUsage
 from src.evaluator.prompts import FACT_EXTRACTION_PROMPT, FACT_VERIFICATION_PROMPT
@@ -16,8 +17,8 @@ class ExtractedClaims(BaseModel):
 class FactAgent(BaseAgent):
     """Extracts factual claims, retrieves grounded evidence via Hybrid RAG, and verifies accuracy."""
 
-    def __init__(self, retriever: Optional[HybridRetriever] = None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, retriever: Optional[HybridRetriever] = None, model: Optional[str] = None, **kwargs):
+        super().__init__(model=model or FACT_AGENT_MODEL, **kwargs)
         self.retriever = retriever
 
     def _get_retriever(self) -> Optional[HybridRetriever]:

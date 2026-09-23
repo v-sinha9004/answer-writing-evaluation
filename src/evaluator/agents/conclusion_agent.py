@@ -1,5 +1,7 @@
 """Specialist Agent: Conclusion Quality & Way Forward Evaluator."""
 
+from typing import Optional
+from src.config import CONCLUSION_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
 from src.evaluator.schemas import EvaluationInput, ConclusionEvaluation, ActionableImprovement
 from src.evaluator.prompts import CONCLUSION_SYSTEM_PROMPT
@@ -7,6 +9,9 @@ from src.evaluator.prompts import CONCLUSION_SYSTEM_PROMPT
 
 class ConclusionAgent(BaseAgent):
     """Evaluates conclusion balance, forward-looking perspective, and constitutional grounding."""
+
+    def __init__(self, model: Optional[str] = None, **kwargs):
+        super().__init__(model=model or CONCLUSION_AGENT_MODEL, **kwargs)
 
     async def evaluate(self, input_data: EvaluationInput) -> ConclusionEvaluation:
         conclusion_text = (input_data.detected_conclusion or "").strip()

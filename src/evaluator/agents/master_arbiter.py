@@ -16,6 +16,7 @@ from src.evaluator.schemas import (
     KnowledgeEvaluation,
     TokenUsage,
 )
+from src.config import MASTER_ARBITER_MODEL
 from src.evaluator.prompts import MASTER_ARBITER_PROMPT
 
 
@@ -38,6 +39,9 @@ class MasterScoringAgent(BaseAgent):
         "structure": 0.10,
         "conclusion": 0.15,
     }
+
+    def __init__(self, model: Optional[str] = None, **kwargs):
+        super().__init__(model=model or MASTER_ARBITER_MODEL, **kwargs)
 
     def calculate_scorecard(
         self,

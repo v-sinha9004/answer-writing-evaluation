@@ -17,6 +17,17 @@ from src.evaluator.schemas import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_test_db(tmp_path, monkeypatch):
+    """Ensure all API tests run against an isolated temporary database."""
+    test_db = tmp_path / "test_api_evaluations.db"
+    monkeypatch.setattr("src.config.DATABASE_PATH", test_db)
+    monkeypatch.setattr("src.db.repository.DATABASE_PATH", test_db)
+    from src.db.repository import init_db
+    init_db(test_db)
+    return test_db
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -118,3 +129,64 @@ async def test_evaluate_pdf_upload_success(client):
         data = response.json()
         assert data["scorecard"]["total_score"] == 7.0
         assert data["scorecard"]["max_marks"] == 10
+        assert data.get("id") is not None
+
+
+def test_evaluations_endpoints_flow(client):
+    """Test full CRUD lifecycle on /api/evaluations endpoints."""
+    # 1. Trigger evaluate-sample to persist an entry
+    mock_report = ComprehensiveEvaluationReport(
+        scorecard=ConsolidatedScorecard(
+            total_score=9.0,
+            max_marks=15,
+            percentage=60.0,
+            benchmark_verdict="Good Answer",
+            dimensions={},
+            penalties_applied=[],
+        ),
+        executive_summary="Solid analytical presentation for history test.",
+        demand_evaluation=DemandEvaluation(),
+        intro_evaluation=IntroEvaluation(),
+        structure_evaluation=StructureEvaluation(),
+        conclusion_evaluation=ConclusionEvaluation(),
+        knowledge_evaluation=KnowledgeEvaluation(),
+        transformation_roadmap=TransformationRoadmap(
+            current_level_summary="Topper quality",
+            step_1_good_answer=[],
+            step_2_topper_answer=[],
+        ),
+        top_value_additions=["Maintain structure"],
+    )
+
+    with patch("src.api.server.orchestrator.evaluate", new_callable=AsyncMock) as mock_eval:
+        mock_eval.return_value = mock_report
+        resp = client.post("/api/evaluate-sample", data={"paper": "GS-1", "marks": 15})
+        assert resp.status_code == 200
+        eval_id = resp.json().get("id")
+        assert eval_id is not None
+
+        # 2. List evaluations
+        list_resp = client.get("/api/evaluations")
+        assert list_resp.status_code == 200
+        evals = list_resp.json()
+        assert isinstance(evals, list)
+        matching = [e for e in evals if e["id"] == eval_id]
+        assert len(matching) == 1
+        assert matching[0]["paper"] == "GS-1"
+
+        # 3. Get single evaluation by ID
+        get_resp = client.get(f"/api/evaluations/{eval_id}")
+        assert get_resp.status_code == 200
+        record = get_resp.json()
+        assert record["id"] == eval_id
+        assert record["report"]["executive_summary"] == "Solid analytical presentation for history test."
+
+        # 4. Delete evaluation by ID
+        del_resp = client.delete(f"/api/evaluations/{eval_id}")
+        assert del_resp.status_code == 200
+        assert del_resp.json()["status"] == "deleted"
+
+        # 5. Verify 404 after deletion
+        get_after = client.get(f"/api/evaluations/{eval_id}")
+        assert get_after.status_code == 404
+

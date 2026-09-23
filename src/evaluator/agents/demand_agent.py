@@ -1,5 +1,7 @@
 """Specialist Agent: Demand & Directive Evaluator."""
 
+from typing import Optional
+from src.config import DEMAND_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
 from src.evaluator.schemas import EvaluationInput, DemandEvaluation, ActionableImprovement
 from src.evaluator.prompts import DEMAND_SYSTEM_PROMPT
@@ -7,6 +9,9 @@ from src.evaluator.prompts import DEMAND_SYSTEM_PROMPT
 
 class DemandAgent(BaseAgent):
     """Evaluates question sub-demand fulfillment and directive compliance."""
+
+    def __init__(self, model: Optional[str] = None, **kwargs):
+        super().__init__(model=model or DEMAND_AGENT_MODEL, **kwargs)
 
     async def evaluate(self, input_data: EvaluationInput) -> DemandEvaluation:
         # Check if candidate text is empty or virtually non-existent

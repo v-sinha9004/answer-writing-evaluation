@@ -22,7 +22,15 @@ from src.evaluator.agents.structure_agent import StructureAgent
 from src.evaluator.agents.conclusion_agent import ConclusionAgent
 from src.evaluator.agents.fact_agent import FactAgent
 from src.evaluator.agents.master_arbiter import MasterScoringAgent
-from src.config import AGENT_MODEL
+from src.config import (
+    AGENT_MODEL,
+    DEMAND_AGENT_MODEL,
+    INTRO_AGENT_MODEL,
+    STRUCTURE_AGENT_MODEL,
+    CONCLUSION_AGENT_MODEL,
+    FACT_AGENT_MODEL,
+    MASTER_ARBITER_MODEL,
+)
 
 
 class EvaluationOrchestrator:
@@ -36,15 +44,30 @@ class EvaluationOrchestrator:
         conclusion_agent: Optional[ConclusionAgent] = None,
         fact_agent: Optional[FactAgent] = None,
         master_arbiter: Optional[MasterScoringAgent] = None,
+        agent_models: Optional[Dict[str, str]] = None,
         model: Optional[str] = None,
     ):
+        models = {
+            "demand": DEMAND_AGENT_MODEL,
+            "intro": INTRO_AGENT_MODEL,
+            "structure": STRUCTURE_AGENT_MODEL,
+            "conclusion": CONCLUSION_AGENT_MODEL,
+            "fact": FACT_AGENT_MODEL,
+            "master_arbiter": MASTER_ARBITER_MODEL,
+        }
+        if model:
+            models = {k: model for k in models}
+        if agent_models:
+            models.update(agent_models)
+
         self.model = model or AGENT_MODEL
-        self.demand_agent = demand_agent or DemandAgent(model=self.model)
-        self.intro_agent = intro_agent or IntroAgent(model=self.model)
-        self.structure_agent = structure_agent or StructureAgent(model=self.model)
-        self.conclusion_agent = conclusion_agent or ConclusionAgent(model=self.model)
-        self.fact_agent = fact_agent or FactAgent(model=self.model)
-        self.master_arbiter = master_arbiter or MasterScoringAgent(model=self.model)
+        self.agent_models = models
+        self.demand_agent = demand_agent or DemandAgent(model=models["demand"])
+        self.intro_agent = intro_agent or IntroAgent(model=models["intro"])
+        self.structure_agent = structure_agent or StructureAgent(model=models["structure"])
+        self.conclusion_agent = conclusion_agent or ConclusionAgent(model=models["conclusion"])
+        self.fact_agent = fact_agent or FactAgent(model=models["fact"])
+        self.master_arbiter = master_arbiter or MasterScoringAgent(model=models["master_arbiter"])
 
     def _handle_empty_submission(self, input_data: EvaluationInput, start_time: float) -> ComprehensiveEvaluationReport:
         """Short-circuit for empty answer sheets without incurring LLM API costs."""

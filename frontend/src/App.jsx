@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 const PAPERS = [
@@ -21,6 +21,14 @@ export default function App() {
   const [error, setError] = useState(null);
   const [report, setReport] = useState(null);
   const [copiedType, setCopiedType] = useState(null);
+
+  // History & Database Persistence State
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [evaluationsList, setEvaluationsList] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedEvaluationMeta, setSelectedEvaluationMeta] = useState(null);
+  const [historyPaperFilter, setHistoryPaperFilter] = useState('ALL');
+  const [deletingId, setDeletingId] = useState(null);
 
   const fileInputRef = useRef(null);
 
@@ -67,6 +75,92 @@ export default function App() {
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   };
 
+  const fetchEvaluations = async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await fetch('/api/evaluations');
+      if (res.ok) {
+        const data = await res.json();
+        setEvaluationsList(data);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvaluations();
+  }, []);
+
+  const formatDate = (isoStr) => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
+  const handleSelectEvaluation = async (evalId) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/evaluations/${evalId}`);
+      if (!res.ok) throw new Error('Could not load evaluation record');
+      const data = await res.json();
+      setReport(data.report);
+      setSelectedEvaluationMeta({
+        id: data.id,
+        created_at: data.created_at,
+        paper: data.paper,
+        marks: data.marks,
+        question_text: data.question_text,
+        filename: data.filename,
+      });
+      setPaper(data.paper || 'GS-1');
+      setMarks(data.marks || 15);
+      setHistoryOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load saved evaluation.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEvaluation = async (e, evalId) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this evaluation record from database?')) return;
+    setDeletingId(evalId);
+    try {
+      const res = await fetch(`/api/evaluations/${evalId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setEvaluationsList((prev) => prev.filter((item) => item.id !== evalId));
+        if (selectedEvaluationMeta?.id === evalId) {
+          resetAll();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete evaluation:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredEvaluations = historyPaperFilter === 'ALL'
+    ? evaluationsList
+    : evaluationsList.filter((item) => item.paper === historyPaperFilter);
+
   const startPipelineTimer = () => {
     setLoadingStep(0);
     const interval = setInterval(() => {
@@ -109,6 +203,14 @@ export default function App() {
 
       const data = await res.json();
       setReport(data);
+      setSelectedEvaluationMeta({
+        id: data.id,
+        created_at: data.created_at,
+        filename: selectedFile.name,
+        paper: paper,
+        marks: marks,
+      });
+      fetchEvaluations();
     } catch (err) {
       console.error(err);
       setError(err.message || 'An error occurred during evaluation.');
@@ -140,6 +242,14 @@ export default function App() {
 
       const data = await res.json();
       setReport(data);
+      setSelectedEvaluationMeta({
+        id: data.id,
+        created_at: data.created_at,
+        filename: 'Sample Copy (Press in India)',
+        paper: paper,
+        marks: marks,
+      });
+      fetchEvaluations();
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to evaluate sample answer.');
@@ -159,11 +269,12 @@ export default function App() {
     setReport(null);
     setSelectedFile(null);
     setError(null);
+    setSelectedEvaluationMeta(null);
   };
 
   return (
     <div className="app-container">
-      {/* Top Navbar: No sidebar, no Google sign in */}
+      {/* Top Navbar */}
       <header className="app-header">
         <div className="brand">
           <div className="brand-icon">
@@ -174,9 +285,27 @@ export default function App() {
           <span className="brand-name">CivilEval AI</span>
         </div>
 
-        <div className="header-badge">
-          <span className="status-dot"></span>
-          <span>5-Agent Specialist Panel Active</span>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="history-nav-btn"
+            onClick={() => { setHistoryOpen(true); fetchEvaluations(); }}
+            title="View saved evaluations"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>Past Evaluations</span>
+            {evaluationsList.length > 0 && (
+              <span className="history-badge-count">{evaluationsList.length}</span>
+            )}
+          </button>
+
+          <div className="header-badge">
+            <span className="status-dot"></span>
+            <span>5-Agent Specialist Panel Active</span>
+          </div>
         </div>
       </header>
 
@@ -233,8 +362,40 @@ export default function App() {
                   </svg>
                   <span>Evaluate Another Copy</span>
                 </button>
-                <span className="time-badge">Evaluated in {report.total_latency_seconds}s</span>
+                <div className="results-header-actions">
+                  <button
+                    type="button"
+                    className="history-switch-btn"
+                    onClick={() => { setHistoryOpen(true); fetchEvaluations(); }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>Past Evaluations ({evaluationsList.length})</span>
+                  </button>
+                  <span className="time-badge">Evaluated in {report.total_latency_seconds}s</span>
+                </div>
               </div>
+
+              {selectedEvaluationMeta && (
+                <div className="saved-eval-indicator">
+                  <div className="saved-eval-left">
+                    <span className="saved-eval-pill">💾 Database Record</span>
+                    <span className="saved-eval-meta">
+                      <strong>ID:</strong> {selectedEvaluationMeta.id} &bull; <strong>Saved:</strong> {formatDate(selectedEvaluationMeta.created_at)}
+                      {selectedEvaluationMeta.filename ? ` • ${selectedEvaluationMeta.filename}` : ''}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="history-reopen-btn"
+                    onClick={() => { setHistoryOpen(true); fetchEvaluations(); }}
+                  >
+                    View All Saved &rarr;
+                  </button>
+                </div>
+              )}
 
               {/* Scorecard Hero */}
               <div className="scorecard-hero">
@@ -621,6 +782,119 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Slide-over Evaluation History Drawer */}
+      {historyOpen && (
+        <div className="history-drawer-backdrop" onClick={() => setHistoryOpen(false)}>
+          <aside className="history-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div className="drawer-title-group">
+                <div className="drawer-title-row">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <h2 className="drawer-title">Evaluation History</h2>
+                </div>
+                <p className="drawer-subtitle">
+                  {evaluationsList.length} saved {evaluationsList.length === 1 ? 'copy' : 'copies'} in SQLite database
+                </p>
+              </div>
+              <button
+                type="button"
+                className="close-drawer-btn"
+                onClick={() => setHistoryOpen(false)}
+                aria-label="Close history"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            {/* Paper Filter Bar */}
+            <div className="history-filters">
+              {['ALL', 'GS-1', 'GS-2', 'GS-3', 'GS-4'].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`filter-pill ${historyPaperFilter === p ? 'active' : ''}`}
+                  onClick={() => setHistoryPaperFilter(p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* History Items List */}
+            <div className="history-list">
+              {historyLoading ? (
+                <div className="history-loading">
+                  <div className="pulse-spinner-small"></div>
+                  <span>Loading saved evaluations...</span>
+                </div>
+              ) : filteredEvaluations.length === 0 ? (
+                <div className="history-empty">
+                  <div className="history-empty-icon">📁</div>
+                  <h3 className="history-empty-title">No evaluations found</h3>
+                  <p className="history-empty-desc">
+                    {historyPaperFilter === 'ALL'
+                      ? 'Evaluated answer copies will be automatically saved into the database and listed here for instant access.'
+                      : `No evaluations found under ${historyPaperFilter}.`}
+                  </p>
+                </div>
+              ) : (
+                filteredEvaluations.map((item) => {
+                  const isSelected = selectedEvaluationMeta?.id === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`history-card ${isSelected ? 'active-card' : ''}`}
+                      onClick={() => handleSelectEvaluation(item.id)}
+                    >
+                      <div className="card-top-row">
+                        <div className="card-tags">
+                          <span className="history-paper-tag">{item.paper}</span>
+                          <span className="history-marks-tag">{item.marks} Marks</span>
+                        </div>
+                        <span className="history-date">{formatDate(item.created_at)}</span>
+                      </div>
+
+                      <div className="card-question-preview" title={item.question_text || item.filename}>
+                        {item.question_text || item.filename || 'UPSC Answer Submission'}
+                      </div>
+
+                      <div className="card-bottom-row">
+                        <div className="history-score-group">
+                          <span className="history-score-val">
+                            {item.total_score} <span className="history-score-denom">/ {item.max_marks}</span>
+                          </span>
+                          <span className="history-pct-pill">{item.percentage}%</span>
+                          <span className="history-verdict-pill">{item.benchmark_verdict}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="delete-history-btn"
+                          title="Delete this evaluation"
+                          disabled={deletingId === item.id}
+                          onClick={(e) => handleDeleteEvaluation(e, item.id)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

@@ -198,6 +198,11 @@ class TransformationRoadmap(BaseModel):
 
 class ComprehensiveEvaluationReport(BaseModel):
     """Final consolidated evaluation report delivered to the candidate."""
+    id: Optional[str] = Field(default=None, description="Unique database evaluation record ID")
+    created_at: Optional[str] = Field(default=None, description="ISO timestamp when evaluated")
+    paper: Optional[str] = Field(default=None, description="General Studies paper code: GS-1, GS-2, etc.")
+    question_text: Optional[str] = Field(default=None, description="Question statement evaluated")
+    filename: Optional[str] = Field(default=None, description="Source PDF filename or sample title")
     scorecard: ConsolidatedScorecard
     executive_summary: str
     demand_evaluation: DemandEvaluation

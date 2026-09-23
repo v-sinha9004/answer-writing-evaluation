@@ -2,12 +2,16 @@
 
 import base64
 import io
+import logging
 import re
 from typing import Optional, Tuple, List
 import pypdf
+from PIL import Image
 from openai import AsyncOpenAI
-from src.config import OPENAI_API_KEY, AGENT_MODEL
+from src.config import OPENAI_API_KEY, VISION_AGENT_MODEL
 from src.evaluator.schemas import EvaluationInput
+
+logger = logging.getLogger("upsc-ocr")
 
 
 class PDFProcessor:
@@ -15,29 +19,69 @@ class PDFProcessor:
 
     def __init__(self, client: Optional[AsyncOpenAI] = None, model: Optional[str] = None):
         self.client = client or AsyncOpenAI(api_key=OPENAI_API_KEY or "sk-dummy-key-for-testing")
-        self.model = model or AGENT_MODEL
+        self.model = model or VISION_AGENT_MODEL
+
+    def render_pdf_pages_to_images(self, pdf_bytes: bytes, max_pages: int = 6) -> List[bytes]:
+        """Render PDF pages directly to high-resolution JPEG images using pypdfium2."""
+        images = []
+        try:
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(pdf_bytes)
+            n_pages = min(len(doc), max_pages)
+            for i in range(n_pages):
+                page = doc[i]
+                # Render at 2x resolution (~150-200 DPI, perfect for OCR on handwriting)
+                pil_img = page.render(scale=2.0).to_pil()
+                if pil_img.mode != "RGB":
+                    pil_img = pil_img.convert("RGB")
+                # Downscale if excessively large to keep payload size optimal
+                if max(pil_img.size) > 2048:
+                    pil_img.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=85)
+                images.append(buf.getvalue())
+        except Exception as e:
+            logger.warning(f"pypdfium2 rendering fallback: {e}")
+        return images
 
     def extract_text_and_images(self, pdf_bytes: bytes) -> Tuple[str, List[bytes]]:
         """Extract embedded text and any embedded page images from PDF bytes."""
-        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        # 1. Extract digital text via pypdf
         extracted_pages = []
-        images = []
-
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            if text.strip():
-                extracted_pages.append(text.strip())
-
-            # Extract images if present
-            try:
-                if hasattr(page, "images") and page.images:
-                    for img in page.images:
-                        if hasattr(img, "data") and img.data:
-                            images.append(img.data)
-            except Exception as img_err:
-                print(f"[PDFProcessor] Warning: Could not extract image from page: {img_err}")
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            for page in reader.pages:
+                text = page.extract_text() or ""
+                if text.strip():
+                    extracted_pages.append(text.strip())
+        except Exception as read_err:
+            logger.warning(f"pypdf text extraction warning: {read_err}")
 
         full_text = "\n\n".join(extracted_pages).strip()
+
+        # 2. Extract images: Prefer rendering visual pages directly (essential for scanned copies)
+        images = self.render_pdf_pages_to_images(pdf_bytes)
+
+        # 3. Fallback to extracting embedded /XObject images via pypdf if pypdfium2 returned nothing
+        if not images:
+            try:
+                reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+                for page in reader.pages:
+                    if hasattr(page, "images") and page.images:
+                        for img in page.images:
+                            if hasattr(img, "data") and img.data:
+                                try:
+                                    im = Image.open(io.BytesIO(img.data))
+                                    if im.mode != "RGB":
+                                        im = im.convert("RGB")
+                                    buf = io.BytesIO()
+                                    im.save(buf, format="JPEG", quality=85)
+                                    images.append(buf.getvalue())
+                                except Exception:
+                                    images.append(img.data)
+            except Exception as img_err:
+                logger.warning(f"pypdf image extraction warning: {img_err}")
+
         return full_text, images
 
     async def transcribe_images_with_vision(self, images: List[bytes]) -> str:
@@ -66,14 +110,17 @@ class PDFProcessor:
                 "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
             })
 
+        logger.info(f"Calling vision model '{self.model}' with {len(selected_images)} page images...")
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": content_items}],
             temperature=0.0,
-            max_tokens=2500,
+            max_completion_tokens=2500,
         )
 
-        return response.choices[0].message.content or ""
+        transcription = response.choices[0].message.content or ""
+        logger.info(f"Vision transcription succeeded with {len(transcription.split())} words.")
+        return transcription
 
     async def process_pdf(
         self,
@@ -91,13 +138,20 @@ class PDFProcessor:
             try:
                 vision_text = await self.transcribe_images_with_vision(images)
                 if vision_text.strip():
-                    text = vision_text.strip()
+                    cleaned = vision_text.strip()
+                    if cleaned.startswith("```markdown"):
+                        cleaned = cleaned[len("```markdown"):].strip()
+                    elif cleaned.startswith("```"):
+                        cleaned = cleaned[3:].strip()
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3].strip()
+                    text = cleaned
             except Exception as e:
-                # If vision transcription fails or no valid API key, proceed with whatever text was found
-                print(f"[PDFProcessor] Vision transcription fallback: {e}")
+                logger.error(f"Vision transcription error: {e}", exc_info=True)
 
         # If still empty, return a blank evaluation input
         if not text:
+            logger.warning("No readable text found after digital extraction and OCR.")
             return EvaluationInput(
                 question_text=question_override or "UPSC Question (Not detected)",
                 question_marks=question_marks,
@@ -137,23 +191,38 @@ class PDFProcessor:
         if not lines:
             return "UPSC Mains Practice Question", text
 
-        # Check if first line or block matches a question pattern
+        # Check if first line matches a question pattern
         first_line = lines[0]
+        cleaned_first_line = re.sub(r"^[#\*\_\s]+", "", first_line).strip()
         question_pattern = re.compile(
             r"^(?:Q(?:uestion)?[\s\.\d\:\)]|(?:\d+[\.\)]\s*)).+",
             re.IGNORECASE,
         )
 
-        if question_pattern.match(first_line) or "?" in first_line or len(first_line) < 250:
-            question = first_line
-            # Check if second line is continuation of question
+        is_question = bool(question_pattern.match(cleaned_first_line) or "?" in first_line)
+
+        if is_question:
+            question = re.sub(r"\*\*+", "", first_line).strip("*#_ ")
             idx = 1
-            while idx < len(lines) and ("?" in lines[idx - 1] is False) and len(lines[idx]) < 120 and not lines[idx].startswith("#"):
-                question += " " + lines[idx]
-                idx += 1
+            # Continue reading question until '?' or explicit answer marker
+            while idx < len(lines):
+                line = lines[idx]
+                cleaned_line = re.sub(r"^[#\*\_\s]+", "", line).lower()
+                # Stop if answer marker is encountered
+                if cleaned_line.startswith(("ans", "answer", "intro", "heading", "#")):
+                    break
                 if "?" in lines[idx - 1]:
                     break
+                if len(line) < 160:
+                    question += " " + re.sub(r"\*\*+", "", line).strip("*#_ ")
+                    idx += 1
+                else:
+                    break
+
             body = "\n\n".join(lines[idx:])
+            # If body became empty, fallback so answer text is not lost
+            if not body.strip():
+                return question.strip(), text
             return question.strip(), body.strip()
 
         return "Examine the following question and evaluate the candidate's answer.", text

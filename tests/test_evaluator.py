@@ -436,3 +436,138 @@ def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
             assert mock_call.call_count == 2
 
     asyncio.run(_run())
+
+
+def test_agent_model_config_default_and_override(monkeypatch):
+    """Verify that each agent has its own configurable model in src.config and can run on any model."""
+    import importlib
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *args, **kwargs: None)
+    for key in [
+        "OPENAI_MODEL", "AGENT_MODEL", "EVALUATION_MODEL",
+        "DEMAND_AGENT_MODEL", "INTRO_AGENT_MODEL", "STRUCTURE_AGENT_MODEL",
+        "CONCLUSION_AGENT_MODEL", "FACT_AGENT_MODEL", "MASTER_ARBITER_MODEL", "VISION_AGENT_MODEL"
+    ]:
+        monkeypatch.delenv(key, raising=False)
+    import src.config
+    importlib.reload(src.config)
+
+    import src.evaluator.base_agent
+    importlib.reload(src.evaluator.base_agent)
+    import src.evaluator.agents.demand_agent
+    importlib.reload(src.evaluator.agents.demand_agent)
+    import src.evaluator.agents.intro_agent
+    importlib.reload(src.evaluator.agents.intro_agent)
+    import src.evaluator.agents.structure_agent
+    importlib.reload(src.evaluator.agents.structure_agent)
+    import src.evaluator.agents.conclusion_agent
+    importlib.reload(src.evaluator.agents.conclusion_agent)
+    import src.evaluator.agents.fact_agent
+    importlib.reload(src.evaluator.agents.fact_agent)
+    import src.evaluator.agents.master_arbiter
+    importlib.reload(src.evaluator.agents.master_arbiter)
+    import src.evaluator.pdf_processor
+    importlib.reload(src.evaluator.pdf_processor)
+    import src.evaluator.orchestrator
+    importlib.reload(src.evaluator.orchestrator)
+
+    from src.evaluator.agents.demand_agent import DemandAgent
+    from src.evaluator.agents.intro_agent import IntroAgent
+    from src.evaluator.agents.structure_agent import StructureAgent
+    from src.evaluator.agents.conclusion_agent import ConclusionAgent
+    from src.evaluator.agents.fact_agent import FactAgent
+    from src.evaluator.agents.master_arbiter import MasterScoringAgent
+    from src.evaluator.orchestrator import EvaluationOrchestrator
+
+    from src.config import (
+        AGENT_MODEL,
+        OPENAI_MODEL,
+        EVALUATION_MODEL,
+        DEMAND_AGENT_MODEL,
+        INTRO_AGENT_MODEL,
+        STRUCTURE_AGENT_MODEL,
+        CONCLUSION_AGENT_MODEL,
+        FACT_AGENT_MODEL,
+        MASTER_ARBITER_MODEL,
+        VISION_AGENT_MODEL,
+        get_agent_models,
+    )
+    from src.evaluator.base_agent import BaseAgent
+    from src.evaluator.pdf_processor import PDFProcessor
+
+    assert AGENT_MODEL == "gpt-4o"
+    assert OPENAI_MODEL == "gpt-4o"
+    assert EVALUATION_MODEL == "gpt-4o"
+
+    # Verify per-agent default models
+    assert DEMAND_AGENT_MODEL == "gpt-4o"
+    assert INTRO_AGENT_MODEL == "gpt-4o"
+    assert STRUCTURE_AGENT_MODEL == "gpt-4o"
+    assert CONCLUSION_AGENT_MODEL == "gpt-4o"
+    assert FACT_AGENT_MODEL == "gpt-4o"
+    assert MASTER_ARBITER_MODEL == "gpt-4o"
+    assert VISION_AGENT_MODEL == "gpt-4o"
+
+    models_dict = get_agent_models()
+    assert models_dict["demand"] == "gpt-4o"
+    assert models_dict["intro"] == "gpt-4o"
+    assert models_dict["structure"] == "gpt-4o"
+    assert models_dict["conclusion"] == "gpt-4o"
+    assert models_dict["fact"] == "gpt-4o"
+    assert models_dict["master_arbiter"] == "gpt-4o"
+    assert models_dict["vision"] == "gpt-4o"
+
+    # Default BaseAgent uses AGENT_MODEL
+    agent = BaseAgent()
+    assert agent.model == AGENT_MODEL
+
+    # Each individual agent uses its own model by default
+    demand = DemandAgent()
+    assert demand.model == DEMAND_AGENT_MODEL
+    intro = IntroAgent()
+    assert intro.model == INTRO_AGENT_MODEL
+    struct = StructureAgent()
+    assert struct.model == STRUCTURE_AGENT_MODEL
+    conclusion = ConclusionAgent()
+    assert conclusion.model == CONCLUSION_AGENT_MODEL
+    fact = FactAgent()
+    assert fact.model == FACT_AGENT_MODEL
+    arbiter = MasterScoringAgent()
+    assert arbiter.model == MASTER_ARBITER_MODEL
+    processor = PDFProcessor()
+    assert processor.model == VISION_AGENT_MODEL
+
+    # Each individual agent can be initialized with any custom model
+    assert DemandAgent(model="claude-3-opus").model == "claude-3-opus"
+    assert IntroAgent(model="gpt-4o-mini").model == "gpt-4o-mini"
+    assert StructureAgent(model="mistral-large").model == "mistral-large"
+    assert ConclusionAgent(model="gemini-1.5-pro").model == "gemini-1.5-pro"
+    assert FactAgent(model="o3-mini").model == "o3-mini"
+    assert MasterScoringAgent(model="o1-preview").model == "o1-preview"
+    assert PDFProcessor(model="gpt-4o-vision-preview").model == "gpt-4o-vision-preview"
+
+    # Orchestrator with per-agent custom models mapping
+    orchestrator_multi = EvaluationOrchestrator(
+        agent_models={
+            "demand": "gpt-4o-mini",
+            "fact": "o3-mini",
+            "master_arbiter": "o1",
+        }
+    )
+    assert orchestrator_multi.demand_agent.model == "gpt-4o-mini"
+    assert orchestrator_multi.intro_agent.model == INTRO_AGENT_MODEL
+    assert orchestrator_multi.structure_agent.model == STRUCTURE_AGENT_MODEL
+    assert orchestrator_multi.conclusion_agent.model == CONCLUSION_AGENT_MODEL
+    assert orchestrator_multi.fact_agent.model == "o3-mini"
+    assert orchestrator_multi.master_arbiter.model == "o1"
+
+    # Orchestrator with global override propagates custom model to all agents
+    orchestrator = EvaluationOrchestrator(model="gpt-4o-mini")
+    assert orchestrator.model == "gpt-4o-mini"
+    assert orchestrator.demand_agent.model == "gpt-4o-mini"
+    assert orchestrator.intro_agent.model == "gpt-4o-mini"
+    assert orchestrator.structure_agent.model == "gpt-4o-mini"
+    assert orchestrator.conclusion_agent.model == "gpt-4o-mini"
+    assert orchestrator.fact_agent.model == "gpt-4o-mini"
+    assert orchestrator.master_arbiter.model == "gpt-4o-mini"
+
+

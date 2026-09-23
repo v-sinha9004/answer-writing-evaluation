@@ -1,5 +1,7 @@
 """Specialist Agent: Body Structure, Heading Taxonomy & Flow Evaluator."""
 
+from typing import Optional
+from src.config import STRUCTURE_AGENT_MODEL
 from src.evaluator.base_agent import BaseAgent
 from src.evaluator.schemas import EvaluationInput, StructureEvaluation, ActionableImprovement
 from src.evaluator.prompts import STRUCTURE_SYSTEM_PROMPT
@@ -7,6 +9,9 @@ from src.evaluator.prompts import STRUCTURE_SYSTEM_PROMPT
 
 class StructureAgent(BaseAgent):
     """Evaluates heading taxonomy, bullet formatting discipline, and argument transitions."""
+
+    def __init__(self, model: Optional[str] = None, **kwargs):
+        super().__init__(model=model or STRUCTURE_AGENT_MODEL, **kwargs)
 
     async def evaluate(self, input_data: EvaluationInput) -> StructureEvaluation:
         body_text = (input_data.full_markdown_text or "").strip()
