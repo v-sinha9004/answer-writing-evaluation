@@ -30,9 +30,6 @@ def print_report(report: ComprehensiveEvaluationReport):
         for p in sc.penalties_applied:
             print(f"   - {p}")
 
-    print("\n" + "-" * 80)
-    print(" 🎯 EXECUTIVE EXAMINER VERDICT:")
-    print(f" {report.executive_summary}")
 
     print("\n" + "-" * 80)
     print(" ✍️ MODEL INTRO & CONCLUSION REWRITES:")

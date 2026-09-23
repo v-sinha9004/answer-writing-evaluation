@@ -204,7 +204,7 @@ class ComprehensiveEvaluationReport(BaseModel):
     question_text: Optional[str] = Field(default=None, description="Question statement evaluated")
     filename: Optional[str] = Field(default=None, description="Source PDF filename or sample title")
     scorecard: ConsolidatedScorecard
-    executive_summary: str
+    executive_summary: Optional[str] = Field(default=None, description="Deprecated; formerly candid examiner assessment")
     demand_evaluation: DemandEvaluation
     intro_evaluation: IntroEvaluation
     structure_evaluation: StructureEvaluation

@@ -40,7 +40,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 max_marks INTEGER NOT NULL,
                 percentage REAL NOT NULL,
                 benchmark_verdict TEXT NOT NULL,
-                executive_summary TEXT,
                 full_answer_text TEXT,
                 report_json TEXT NOT NULL,
                 total_latency_seconds REAL DEFAULT 0.0
@@ -87,9 +86,9 @@ def save_evaluation(
             INSERT INTO evaluations (
                 id, created_at, paper, marks, question_text, filename,
                 word_count, legibility_status, total_score, max_marks,
-                percentage, benchmark_verdict, executive_summary,
+                percentage, benchmark_verdict,
                 full_answer_text, report_json, total_latency_seconds
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 eval_id,
@@ -104,7 +103,6 @@ def save_evaluation(
                 scorecard.max_marks,
                 scorecard.percentage,
                 scorecard.benchmark_verdict,
-                report.executive_summary,
                 input_data.full_markdown_text,
                 report_json_str,
                 report.total_latency_seconds,
@@ -144,7 +142,6 @@ def get_evaluation(
             "max_marks": row["max_marks"],
             "percentage": row["percentage"],
             "benchmark_verdict": row["benchmark_verdict"],
-            "executive_summary": row["executive_summary"],
             "full_answer_text": row["full_answer_text"],
             "total_latency_seconds": row["total_latency_seconds"],
             "report": report_dict,

@@ -118,10 +118,6 @@ class EvaluationOrchestrator:
 
         return ComprehensiveEvaluationReport(
             scorecard=scorecard,
-            executive_summary=(
-                "Evaluation could not be performed because the answer text was empty or illegible. "
-                "Awarded 0 marks. Please check your uploaded copy and re-submit."
-            ),
             demand_evaluation=DemandEvaluation(
                 status="SKIPPED",
                 directive_adherence_score=0.0,

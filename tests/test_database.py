@@ -40,7 +40,6 @@ def sample_report():
             dimensions={},
             penalties_applied=[],
         ),
-        executive_summary="Well structured response addressing key demands.",
         demand_evaluation=DemandEvaluation(directive_adherence_score=8.0, demand_coverage_pct=85.0),
         intro_evaluation=IntroEvaluation(intro_score=7.0),
         structure_evaluation=StructureEvaluation(structural_score=7.5),
@@ -88,7 +87,6 @@ def test_get_evaluation(temp_db, sample_input, sample_report):
     assert record["total_score"] == 8.5
     assert record["benchmark_verdict"] == "Solid Answer (50-60%)"
     assert "revolutionary role" in record["full_answer_text"]
-    assert record["report"]["executive_summary"] == "Well structured response addressing key demands."
 
 
 def test_list_evaluations(temp_db, sample_input, sample_report):

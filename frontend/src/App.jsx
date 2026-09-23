@@ -438,13 +438,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Executive Examiner Verdict */}
-              <div className="verdict-callout">
-                <div className="verdict-callout-title">🏛️ Executive Examiner Verdict</div>
-                <div className="verdict-callout-text">
-                  <MarkdownText text={report.executive_summary} />
-                </div>
-              </div>
 
               {/* 5-Parameter Dimension Breakdown */}
               <div>

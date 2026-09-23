@@ -54,7 +54,6 @@ async def test_evaluate_sample_endpoint(client):
             dimensions={},
             penalties_applied=[],
         ),
-        executive_summary="Good answer covering the main aspects.",
         demand_evaluation=DemandEvaluation(directive_adherence_score=8.0, demand_coverage_pct=80.0),
         intro_evaluation=IntroEvaluation(intro_score=7.0),
         structure_evaluation=StructureEvaluation(structural_score=7.5),
@@ -75,7 +74,6 @@ async def test_evaluate_sample_endpoint(client):
         data = response.json()
         assert data["scorecard"]["total_score"] == 8.5
         assert data["scorecard"]["max_marks"] == 15
-        assert "Good answer" in data["executive_summary"]
 
 
 def test_evaluate_pdf_invalid_file_type(client):
@@ -101,7 +99,6 @@ async def test_evaluate_pdf_upload_success(client):
             dimensions={},
             penalties_applied=[],
         ),
-        executive_summary="Solid analytical presentation.",
         demand_evaluation=DemandEvaluation(),
         intro_evaluation=IntroEvaluation(),
         structure_evaluation=StructureEvaluation(),
@@ -144,7 +141,6 @@ def test_evaluations_endpoints_flow(client):
             dimensions={},
             penalties_applied=[],
         ),
-        executive_summary="Solid analytical presentation for history test.",
         demand_evaluation=DemandEvaluation(),
         intro_evaluation=IntroEvaluation(),
         structure_evaluation=StructureEvaluation(),
@@ -179,7 +175,6 @@ def test_evaluations_endpoints_flow(client):
         assert get_resp.status_code == 200
         record = get_resp.json()
         assert record["id"] == eval_id
-        assert record["report"]["executive_summary"] == "Solid analytical presentation for history test."
 
         # 4. Delete evaluation by ID
         del_resp = client.delete(f"/api/evaluations/{eval_id}")

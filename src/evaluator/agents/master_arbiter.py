@@ -23,7 +23,6 @@ from src.evaluator.prompts import MASTER_ARBITER_PROMPT
 
 class ArbiterSynthesis(BaseModel):
     """Structured output for the Master Arbiter's qualitative synthesis."""
-    executive_summary: str = Field(description="2-3 sentence candid UPSC examiner assessment")
     current_level_summary: str = Field(description="Short diagnosis of the answer's current state")
     step_1_good_answer: List[str] = Field(description="Top 2-3 concrete fixes to reach 55% marks")
     step_2_topper_answer: List[str] = Field(description="Advanced additions to reach 70%+ topper level")
@@ -223,9 +222,8 @@ class MasterScoringAgent(BaseAgent):
 - Critique: {fact_eval.critique}
 
 Provide:
-1. Candid 2-3 sentence executive_summary.
-2. 3-step Answer Transformation Roadmap (current_level_summary, step_1_good_answer, step_2_topper_answer).
-3. Exactly top 3 high-impact value additions (+1.5 mark boosters).
+1. 3-step Answer Transformation Roadmap (current_level_summary, step_1_good_answer, step_2_topper_answer).
+2. Exactly top 3 high-impact value additions (+1.5 mark boosters).
 """
 
         master_usage = TokenUsage()
@@ -240,11 +238,9 @@ Provide:
                 step_1_good_answer=synthesis.step_1_good_answer,
                 step_2_topper_answer=synthesis.step_2_topper_answer,
             )
-            exec_summary = synthesis.executive_summary
             value_additions = synthesis.top_value_additions
         except Exception as e:
             # Safe fallback if synthesis LLM call fails
-            exec_summary = f"Score: {scorecard.total_score}/{scorecard.max_marks} ({scorecard.percentage}%). {scorecard.benchmark_verdict}."
             roadmap = TransformationRoadmap(
                 current_level_summary=f"Evaluated at {scorecard.total_score}/{scorecard.max_marks}.",
                 step_1_good_answer=[
@@ -281,7 +277,6 @@ Provide:
 
         return ComprehensiveEvaluationReport(
             scorecard=scorecard,
-            executive_summary=exec_summary,
             demand_evaluation=demand_eval,
             intro_evaluation=intro_eval,
             structure_evaluation=structure_eval,

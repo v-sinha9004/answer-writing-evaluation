@@ -77,7 +77,6 @@ def test_empty_main_answer_short_circuit():
         assert report.scorecard.total_score == 0.0
         assert report.scorecard.max_marks == 10
         assert report.scorecard.benchmark_verdict == "Blank / Empty Submission"
-        assert "empty or illegible" in report.executive_summary.lower()
 
     asyncio.run(_run())
 
@@ -303,7 +302,6 @@ def test_orchestrator_parallel_mock_execution():
             new=AsyncMock(
                 return_value=(
                     ArbiterSynthesis(
-                        executive_summary="Solid attempt with clear heading taxonomy, but suffers from chronological errors in early newspapers and lacks stage-wise grouping.",
                         current_level_summary="Current Level: 6.2 / 15 Marks (41.3% - Average Baseline Attempt)",
                         step_1_good_answer=[
                             "Fix English newspaper chronology (Bengal Gazette 1780 vs The Hindu 1878).",
@@ -340,7 +338,6 @@ def test_orchestrator_parallel_mock_execution():
             assert isinstance(report, ComprehensiveEvaluationReport)
             assert report.scorecard.max_marks == 15
             assert report.scorecard.total_score > 0
-            assert "Solid attempt" in report.executive_summary
             assert len(report.transformation_roadmap.step_1_good_answer) == 3
             assert len(report.transformation_roadmap.step_2_topper_answer) == 3
             assert len(report.top_value_additions) == 3
