@@ -266,6 +266,7 @@ class PDFProcessor:
             estimated_word_count=ocr_response.estimated_word_count or len(ocr_response.full_markdown_text.split()),
             legibility_status=ocr_response.legibility_status or "AVERAGE",
             subject_paper=subject_paper,
+            ocr_json=ocr_response.model_dump_json(),
         )
 
     # Backward compatibility alias

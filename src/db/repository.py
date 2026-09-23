@@ -42,6 +42,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 benchmark_verdict TEXT NOT NULL,
                 full_answer_text TEXT,
                 report_json TEXT NOT NULL,
+                ocr_json TEXT,
                 total_latency_seconds REAL DEFAULT 0.0
             );
             """
@@ -52,6 +53,11 @@ def init_db(db_path: Optional[Path] = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_evaluations_paper ON evaluations(paper);"
         )
+        # Safe migration for existing evaluations table to add ocr_json if missing
+        try:
+            conn.execute("ALTER TABLE evaluations ADD COLUMN ocr_json TEXT;")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         conn.commit()
 
 
@@ -59,6 +65,7 @@ def save_evaluation(
     input_data: Union[EvaluationInput, Dict[str, Any]],
     report: ComprehensiveEvaluationReport,
     filename: Optional[str] = None,
+    ocr_json: Optional[Union[str, Dict[str, Any]]] = None,
     db_path: Optional[Path] = None,
 ) -> str:
     """Save an evaluation report and candidate answer input into SQLite."""
@@ -80,6 +87,11 @@ def save_evaluation(
     scorecard = report.scorecard
     report_json_str = report.model_dump_json()
 
+    # Determine OCR JSON directly provided by vision ocr or caller
+    final_ocr_json = ocr_json or getattr(input_data, "ocr_json", None)
+    if isinstance(final_ocr_json, dict):
+        final_ocr_json = json.dumps(final_ocr_json, ensure_ascii=False)
+
     with get_connection(db_path) as conn:
         conn.execute(
             """
@@ -87,8 +99,8 @@ def save_evaluation(
                 id, created_at, paper, marks, question_text, filename,
                 word_count, legibility_status, total_score, max_marks,
                 percentage, benchmark_verdict,
-                full_answer_text, report_json, total_latency_seconds
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                full_answer_text, report_json, ocr_json, total_latency_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 eval_id,
@@ -105,6 +117,7 @@ def save_evaluation(
                 scorecard.benchmark_verdict,
                 input_data.full_markdown_text,
                 report_json_str,
+                final_ocr_json,
                 report.total_latency_seconds,
             ),
         )
@@ -128,6 +141,12 @@ def get_evaluation(
             return None
 
         report_dict = json.loads(row["report_json"])
+        ocr_data = None
+        if "ocr_json" in row.keys() and row["ocr_json"]:
+            try:
+                ocr_data = json.loads(row["ocr_json"])
+            except Exception:
+                ocr_data = row["ocr_json"]
 
         return {
             "id": row["id"],
@@ -143,6 +162,7 @@ def get_evaluation(
             "percentage": row["percentage"],
             "benchmark_verdict": row["benchmark_verdict"],
             "full_answer_text": row["full_answer_text"],
+            "ocr_json": ocr_data,
             "total_latency_seconds": row["total_latency_seconds"],
             "report": report_dict,
         }

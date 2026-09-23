@@ -25,9 +25,9 @@ logger = logging.getLogger("upsc-api")
 
 
 @observe_stage(name="database_persistence", as_type="span")
-def persist_report_to_db(input_data, report, filename: str) -> str:
+def persist_report_to_db(input_data, report, filename: str, ocr_json: Optional[str] = None) -> str:
     """Persist evaluation to SQLite database within an observed span."""
-    return save_evaluation(input_data=input_data, report=report, filename=filename)
+    return save_evaluation(input_data=input_data, report=report, filename=filename, ocr_json=ocr_json)
 
 
 @asynccontextmanager
@@ -142,11 +142,15 @@ async def evaluate_sample(
 
     # Persist sample evaluation to database
     try:
-        input_data = EvaluationInput.model_validate(payload)
+        sample_ocr_str = json.dumps(payload)
+        payload_with_ocr = dict(payload)
+        payload_with_ocr["ocr_json"] = sample_ocr_str
+        input_data = EvaluationInput.model_validate(payload_with_ocr)
         eval_id = persist_report_to_db(
             input_data=input_data,
             report=report,
             filename="sample_ocr_press_in_india.json",
+            ocr_json=sample_ocr_str,
         )
         logger.info(f"Persisted sample evaluation to database with ID: {eval_id}")
     except Exception as db_err:

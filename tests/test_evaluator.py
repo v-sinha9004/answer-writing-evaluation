@@ -630,6 +630,8 @@ async def test_vision_ocr_agent_structured_parsing(tmp_path):
         assert result.estimated_word_count == 185
         assert result.legibility_status == "CLEAR"
         assert result.subject_paper == "GS-1"
+        assert result.ocr_json is not None
+        assert "Vernacular Press Act" in result.ocr_json
 
 
 @pytest.mark.anyio

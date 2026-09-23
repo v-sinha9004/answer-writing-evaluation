@@ -175,6 +175,7 @@ def test_evaluations_endpoints_flow(client):
         assert get_resp.status_code == 200
         record = get_resp.json()
         assert record["id"] == eval_id
+        assert record["ocr_json"] is not None
 
         # 4. Delete evaluation by ID
         del_resp = client.delete(f"/api/evaluations/{eval_id}")

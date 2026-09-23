@@ -30,6 +30,7 @@ class EvaluationInput(BaseModel):
     estimated_word_count: int = Field(default=0, description="Estimated total word count of written answer")
     legibility_status: Optional[str] = Field(default="AVERAGE", description="CLEAR, AVERAGE, or POOR")
     subject_paper: str = Field(default="GS-1", description="General Studies paper code: GS-1, GS-2, etc.")
+    ocr_json: Optional[str] = Field(default=None, description="Raw OCR JSON transcription output")
 
     @field_validator("question_marks", mode="before")
     @classmethod
