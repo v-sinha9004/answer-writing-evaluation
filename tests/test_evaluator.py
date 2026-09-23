@@ -1,0 +1,410 @@
+"""Unit and integration tests for the UPSC Multi-Agent Evaluator Engine."""
+
+import asyncio
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from src.evaluator.schemas import (
+    EvaluationInput,
+    ComprehensiveEvaluationReport,
+    ConsolidatedScorecard,
+    DemandEvaluation,
+    IntroEvaluation,
+    StructureEvaluation,
+    ConclusionEvaluation,
+    KnowledgeEvaluation,
+    FactualClaimCheck,
+    ActionableImprovement,
+    TransformationRoadmap,
+)
+from src.evaluator.agents.master_arbiter import MasterScoringAgent, ArbiterSynthesis
+from src.evaluator.agents.demand_agent import DemandAgent
+from src.evaluator.agents.intro_agent import IntroAgent
+from src.evaluator.agents.structure_agent import StructureAgent
+from src.evaluator.agents.conclusion_agent import ConclusionAgent
+from src.evaluator.agents.fact_agent import FactAgent, ExtractedClaims
+from src.evaluator.orchestrator import EvaluationOrchestrator
+
+
+USER_SAMPLE_OCR_JSON = {
+    "question_text": "Trace the evolution of the press in India. Also, discuss the instrumental impact it had during various stages of the Indian freedom struggle despite the repressive policies of the British.",
+    "question_marks": "15",
+    "full_markdown_text": "Press played a major part in taking revolutionary ideas across regions, from August Hickey's paper to nationalist papers, all had a role to play\n\n### Evolution of Press in India\n\n1. The Hindu, Bengalee etc were first English Newspapers.\n\n2. With time 'Kesari' and 'Maratha' of Tilak, Rast Goftar of Dada bhai Naoroji came into being\n\n3. vernacular publications like Amrita Bazar Patrika etc conveyed revolutionary ideas to locals when vernacular act banned local papers.\n\n4. Gandhi ji used 'Young India' to transmit his ideas.\n\n### Instrumental in India's freedom struggle, despite repressive policies\n\n1. used to propagate theories.\nEx- Moderates Economic drain theory got vast publicity\n\n2. source of international news.\nEx- News of Japan defeating Russia caught nation's emotions that an Asian nation could win\n\n3. instigated masses\nEx- Tilak's article in Maratha which faced wrath of people British\n\n4. choice of words to escape sedition\nEx \"Iss Raj Ke Taas Hilane Houge\" was about to get seditious turn, when the revolutionary said he was speaking of Esraj (musical instrument) whose wires had to be sorted\n\n5. Publications like Gulam Giri, Dalit Upeedak caught people's attention.\nNeel Darpan highlighted plight of indigo workers.\n\n### Facing repressive Policies\n\n1. Sedition on Tilak\n\n2. Amrita Bazar Patrika turned to English overnight to escape Vernacular Press Act.\n\n3. Gandhi's Article led to British summoning him for sedition.\n\n4. International support to highlight British atrocities.\n\nThus, Press became the open mouth piece of revolutionaries and ensured ideals of freedom struggle reach all nook and corners of India",
+    "detected_intro": "Press played a major part in taking revolutionary ideas across regions, from August Hickey's paper to nationalist papers, all had a role to play",
+    "detected_conclusion": "Thus, Press became the open mouth piece of revolutionaries and ensured ideals of freedom struggle reach all nook and corners of India",
+    "estimated_word_count": 214,
+    "legibility_status": "AVERAGE",
+}
+
+
+def test_evaluation_input_schema_validation():
+    """Verify EvaluationInput parses string marks ('15'), handles empty fields, and sanitizes strings."""
+    input_data = EvaluationInput.model_validate(USER_SAMPLE_OCR_JSON)
+    assert input_data.question_marks == 15
+    assert isinstance(input_data.question_marks, int)
+    assert "Trace the evolution" in input_data.question_text
+    assert input_data.estimated_word_count == 214
+    assert input_data.legibility_status == "AVERAGE"
+
+    # Test missing intro and conclusion defaulting gracefully
+    minimal_json = {
+        "question_text": "Examine the 1857 Revolt.",
+        "question_marks": 10,
+        "full_markdown_text": "Sample text",
+        "detected_intro": None,
+        "detected_conclusion": None,
+    }
+    obj = EvaluationInput.model_validate(minimal_json)
+    assert obj.detected_intro == ""
+    assert obj.detected_conclusion == ""
+
+
+def test_empty_main_answer_short_circuit():
+    """Verify orchestrator short-circuits on empty answer text without calling LLMs."""
+    async def _run():
+        orchestrator = EvaluationOrchestrator()
+        empty_payload = {
+            "question_text": "Explain the Subsidiary Alliance system.",
+            "question_marks": "10",
+            "full_markdown_text": "   \n\n  ",
+            "detected_intro": "",
+            "detected_conclusion": "",
+            "estimated_word_count": 0,
+        }
+
+        report = await orchestrator.evaluate(empty_payload)
+        assert report.is_empty_submission is True
+        assert report.scorecard.total_score == 0.0
+        assert report.scorecard.max_marks == 10
+        assert report.scorecard.benchmark_verdict == "Blank / Empty Submission"
+        assert "empty or illegible" in report.executive_summary.lower()
+
+    asyncio.run(_run())
+
+
+def test_scoring_calibration_math_deterministic():
+    """Verify calibrated score formula and penalty application."""
+    arbiter = MasterScoringAgent()
+    input_data = EvaluationInput.model_validate(USER_SAMPLE_OCR_JSON)
+
+    # Simulated specialist scores
+    demand_eval = DemandEvaluation(
+        directive_adherence_score=6.0,
+        demand_coverage_pct=65.0,
+        critique="Good coverage of policies, moderate on stages.",
+    )
+    fact_eval = KnowledgeEvaluation(
+        factual_accuracy_score=5.0,
+        critique="Two factual inaccuracies regarding Bengal Gazette and Neel Darpan.",
+    )
+    intro_eval = IntroEvaluation(
+        intro_present=True,
+        intro_score=6.0,
+        critique="Good mention of Hickey, missed 1780 date.",
+        model_intro_rewrite="Model intro snippet.",
+    )
+    structure_eval = StructureEvaluation(
+        structural_score=7.0,
+        critique="Clear headings, need bold keyword prefixes.",
+    )
+    conclusion_eval = ConclusionEvaluation(
+        conclusion_present=True,
+        conclusion_score=5.0,
+        critique="Summarized well, lacked Article 19(1)(a) bridge.",
+        model_conclusion_rewrite="Model conclusion snippet.",
+    )
+
+    scorecard = arbiter.calculate_scorecard(
+        input_data=input_data,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+
+    # Weights: Demand 30%, Fact 35%, Intro 10%, Struct 10%, Concl 15%
+    # Expected: (0.30*6.0 + 0.35*5.0 + 0.10*6.0 + 0.10*7.0 + 0.15*5.0) = 1.8 + 1.75 + 0.6 + 0.7 + 0.75 = 5.60 / 10
+    # Scaled to 15 marks: (5.60 / 10) * 15 = 8.40 / 15
+    assert scorecard.max_marks == 15
+    assert scorecard.total_score == 8.4
+    assert scorecard.percentage == 56.0
+    assert "Good / Competitive Mains Standard" in scorecard.benchmark_verdict
+    assert len(scorecard.dimensions) == 5
+
+
+def test_dynamic_reweighting_on_agent_failure():
+    """Verify that when an agent fails, remaining active agents have weights re-normalized to 100%."""
+    arbiter = MasterScoringAgent()
+    input_data = EvaluationInput.model_validate(USER_SAMPLE_OCR_JSON)
+
+    demand_eval = DemandEvaluation(directive_adherence_score=6.0)
+    fact_eval = KnowledgeEvaluation(factual_accuracy_score=6.0)
+    intro_eval = IntroEvaluation.fallback("Timeout")  # FAILED
+    structure_eval = StructureEvaluation(structural_score=6.0)
+    conclusion_eval = ConclusionEvaluation(conclusion_score=6.0)
+
+    scorecard = arbiter.calculate_scorecard(
+        input_data=input_data,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+
+    # Since Intro failed, its 10% weight is dropped and remaining 90% is normalized to 1.0
+    # Since all active scores are 6.0/10, weighted average remains 6.0/10 -> 9.0/15 marks
+    assert scorecard.total_score == 9.0
+    # Intro dimension should be recorded
+    assert "Introduction" in scorecard.dimensions
+
+
+def test_intro_and_conclusion_missing_handling():
+    """Verify IntroAgent and ConclusionAgent handle missing sections gracefully."""
+    async def _run():
+        intro_agent = IntroAgent()
+        conclusion_agent = ConclusionAgent()
+
+        # Mock run_structured to simulate LLM response for empty intro
+        expected_intro_res = IntroEvaluation(
+            intro_present=False,
+            conciseness_score=0.0,
+            contextual_score=0.0,
+            intro_score=0.0,
+            critique="Candidate jumped directly into body headings without an introduction.",
+            improvements=[
+                ActionableImprovement(
+                    section="Introduction",
+                    issue_detected="No introduction written.",
+                    mark_impact="Loss of ~1.5 opening context marks.",
+                    prescription="Include a 30-word contextual definition before body headings.",
+                    plug_and_play_snippet="Model intro snippet.",
+                )
+            ],
+            model_intro_rewrite="Originating in 1780 with Bengal Gazette, Indian press catalyzed anti-colonial thought.",
+        )
+
+        with patch.object(intro_agent, "run_structured", new=AsyncMock(return_value=expected_intro_res)):
+            input_empty_intro = EvaluationInput(
+                question_text="Trace evolution of press",
+                question_marks=15,
+                full_markdown_text="Body content",
+                detected_intro="",
+            )
+            res = await intro_agent.evaluate(input_empty_intro)
+            assert res.intro_present is False
+            assert res.intro_score == 0.0
+            assert len(res.model_intro_rewrite) > 10
+
+        # Mock run_structured for empty conclusion
+        expected_concl_res = ConclusionEvaluation(
+            conclusion_present=False,
+            forward_looking_score=0.0,
+            balance_score=0.0,
+            conclusion_score=0.0,
+            critique="Answer ended abruptly with no concluding synthesis.",
+            improvements=[
+                ActionableImprovement(
+                    section="Conclusion",
+                    issue_detected="No conclusion written.",
+                    mark_impact="Loss of ~1.5 marks for Way Forward.",
+                    prescription="Conclude by connecting the issue to constitutional values.",
+                    plug_and_play_snippet="Model conclusion snippet.",
+                )
+            ],
+            model_conclusion_rewrite="Ultimately, the struggle for a free press shaped Article 19(1)(a).",
+        )
+
+        with patch.object(conclusion_agent, "run_structured", new=AsyncMock(return_value=expected_concl_res)):
+            input_empty_concl = EvaluationInput(
+                question_text="Trace evolution of press",
+                question_marks=15,
+                full_markdown_text="Body content",
+                detected_conclusion="",
+            )
+            c_res = await conclusion_agent.evaluate(input_empty_concl)
+            assert c_res.conclusion_present is False
+            assert c_res.conclusion_score == 0.0
+            assert "Article 19" in c_res.model_conclusion_rewrite
+
+    asyncio.run(_run())
+
+
+def test_orchestrator_parallel_mock_execution():
+    """Verify end-to-end orchestrator runs all 5 specialists concurrently on the user's sample answer."""
+    async def _run():
+        # Set up mocked specialists
+        mock_demand = AsyncMock(spec=DemandAgent)
+        mock_demand.evaluate.return_value = DemandEvaluation(
+            directive_adherence_score=6.5,
+            demand_coverage_pct=70.0,
+            critique="Addressed evolution and policies well; group impact by chronological stages.",
+            improvements=[
+                ActionableImprovement(
+                    section="Demand - Stages of Struggle",
+                    issue_detected="Impact points not organized by chronological freedom struggle phases.",
+                    mark_impact="Loses ~1.5 marks on directive 'various stages'.",
+                    prescription="Group points under Moderate, Swadeshi, and Gandhian phases.",
+                    plug_and_play_snippet="• **Moderate Phase**: Propagated Drain of Wealth theory...",
+                )
+            ]
+        )
+
+        mock_intro = AsyncMock(spec=IntroAgent)
+        mock_intro.evaluate.return_value = IntroEvaluation(
+            intro_present=True,
+            intro_score=6.0,
+            critique="Good mention of Hickey; add exact 1780 Bengal Gazette context.",
+            model_intro_rewrite="Originating with James Augustus Hicky’s Bengal Gazette (1780), the Indian press evolved into the vanguard of nationalist consciousness.",
+        )
+
+        mock_structure = AsyncMock(spec=StructureAgent)
+        mock_structure.evaluate.return_value = StructureEvaluation(
+            structural_score=7.0,
+            critique="Subheadings match prompt keywords; upgrade plain numbered points to bold keyword prefixes.",
+        )
+
+        mock_concl = AsyncMock(spec=ConclusionAgent)
+        mock_concl.evaluate.return_value = ConclusionEvaluation(
+            conclusion_present=True,
+            conclusion_score=5.5,
+            critique="Good summary; bridge historical struggle to modern Article 19(1)(a).",
+            model_conclusion_rewrite="Ultimately, the nationalist press served as a crucible for civil liberties, directly shaping the democratic bedrock of Article 19(1)(a).",
+        )
+
+        mock_fact = AsyncMock(spec=FactAgent)
+        mock_fact.evaluate.return_value = KnowledgeEvaluation(
+            factual_accuracy_score=5.5,
+            claims_checked=[
+                FactualClaimCheck(
+                    claim="The Hindu was first English Newspaper",
+                    verdict="INCORRECT",
+                    correction="Bengal Gazette (1780) was the first; The Hindu was founded in 1878.",
+                ),
+                FactualClaimCheck(
+                    claim="Amrita Bazar Patrika turned to English overnight",
+                    verdict="VERIFIED",
+                    grounded_evidence="Sisir Kumar Ghosh converted it into English to evade Vernacular Press Act 1878.",
+                ),
+            ],
+            syllabus_enrichments=["Charles Metcalfe (1835 Liberator of Press)", "Section 124A IPC Tilak Trial 1897"],
+        )
+
+        arbiter = MasterScoringAgent()
+        with patch.object(
+            arbiter,
+            "run_structured",
+            new=AsyncMock(
+                return_value=ArbiterSynthesis(
+                    executive_summary="Solid attempt with clear heading taxonomy, but suffers from chronological errors in early newspapers and lacks stage-wise grouping.",
+                    current_level_summary="Current Level: 6.2 / 15 Marks (41.3% - Average Baseline Attempt)",
+                    step_1_good_answer=[
+                        "Fix English newspaper chronology (Bengal Gazette 1780 vs The Hindu 1878).",
+                        "Adopt bold-prefixed bullet points under existing headings.",
+                        "Adopt the provided Model Introduction rewrite.",
+                    ],
+                    step_2_topper_answer=[
+                        "Structure the impact section into the 3 distinct phases (Moderate, Swadeshi, Gandhian).",
+                        "Cite Charles Metcalfe's 1835 Act and Tilak's Section 124A trial.",
+                        "Conclude with the Article 19(1)(a) freedom of speech bridge.",
+                    ],
+                    top_value_additions=[
+                        "Replace opening with the 30-word Model Introduction.",
+                        "Organize freedom struggle impact chronologically across 3 phases.",
+                        "Adopt the Model Conclusion linking to Article 19(1)(a).",
+                    ],
+                )
+            ),
+        ):
+            orchestrator = EvaluationOrchestrator(
+                demand_agent=mock_demand,
+                intro_agent=mock_intro,
+                structure_agent=mock_structure,
+                conclusion_agent=mock_concl,
+                fact_agent=mock_fact,
+                master_arbiter=arbiter,
+            )
+
+            report = await orchestrator.evaluate(USER_SAMPLE_OCR_JSON)
+
+            # Assertions
+            assert isinstance(report, ComprehensiveEvaluationReport)
+            assert report.scorecard.max_marks == 15
+            assert report.scorecard.total_score > 0
+            assert "Solid attempt" in report.executive_summary
+            assert len(report.transformation_roadmap.step_1_good_answer) == 3
+            assert len(report.transformation_roadmap.step_2_topper_answer) == 3
+            assert len(report.top_value_additions) == 3
+            assert len(report.knowledge_evaluation.claims_checked) == 2
+            assert report.intro_evaluation.model_intro_rewrite != ""
+            assert report.conclusion_evaluation.model_conclusion_rewrite != ""
+
+            # Verify all 5 agents were awaited
+            mock_demand.evaluate.assert_awaited_once()
+            mock_intro.evaluate.assert_awaited_once()
+            mock_structure.evaluate.assert_awaited_once()
+            mock_concl.evaluate.assert_awaited_once()
+            mock_fact.evaluate.assert_awaited_once()
+
+    asyncio.run(_run())
+
+
+def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
+    """Verify FactAgent extracts claims and queries HybridRetriever for grounded evidence."""
+    async def _run():
+        # Setup in-memory vector store with isolated collection name & temp BM25 store
+        from src.rag.store import ChromaVectorStore
+        from src.rag.retriever import BM25Store, HybridRetriever
+        from src.rag.embeddings import EmbeddingClient
+
+        store = ChromaVectorStore(collection_name="test_fact_agent_isolated", in_memory=True)
+        store.upsert(sample_modern_history_chunks)
+
+        bm25_store = BM25Store(persist_path=tmp_path / "fact_bm25.pkl")
+        bm25_store.build_and_save(sample_modern_history_chunks)
+
+        mock_embedding_client = MagicMock(spec=EmbeddingClient)
+        mock_embedding_client.embed_query.return_value = [-0.05] * 1536
+
+        retriever = HybridRetriever(
+            vector_store=store,
+            embedding_client=mock_embedding_client,
+            bm25_store=bm25_store,
+        )
+
+        fact_agent = FactAgent(retriever=retriever)
+
+        # Mock claim extraction step
+        extracted_mock = ExtractedClaims(
+            claims=["The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855."]
+        )
+        verified_mock = KnowledgeEvaluation(
+            factual_accuracy_score=8.5,
+            claims_checked=[
+                FactualClaimCheck(
+                    claim="The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855.",
+                    verdict="VERIFIED",
+                    grounded_evidence="The Santhal Rebellion took place between 1855 and 1856 under Sidhu and Kanhu Murmu.",
+                    source_citation="Spectrum Modern History p. 201",
+                )
+            ],
+            syllabus_enrichments=["Damin-i-Koh region", "Santhal Parganas Tenancy Act"],
+            critique="Accurate historical claim grounded in reference store.",
+        )
+
+        with patch.object(fact_agent, "run_structured", side_effect=[extracted_mock, verified_mock]) as mock_call:
+            input_data = EvaluationInput(
+                question_text="Examine tribal uprisings with reference to Santhal rebellion.",
+                question_marks=10,
+                full_markdown_text="The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855 against zamindars.",
+            )
+            result = await fact_agent.evaluate(input_data)
+
+            assert result.factual_accuracy_score == 8.5
+            assert len(result.claims_checked) == 1
+            assert result.claims_checked[0].verdict == "VERIFIED"
+            assert "Damin-i-Koh" in result.syllabus_enrichments[0]
+            # Ensure run_structured was called twice (extraction + verification)
+            assert mock_call.call_count == 2
+
+    asyncio.run(_run())

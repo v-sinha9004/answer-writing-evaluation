@@ -1,0 +1,199 @@
+"""Data models and typed contracts for the UPSC Multi-Agent Evaluation Engine."""
+
+from typing import List, Optional, Literal, Dict, Any, Union
+from pydantic import BaseModel, Field, field_validator
+
+
+class ActionableImprovement(BaseModel):
+    """Pedagogical remedy pairing an issue with exact instructions and plug-and-play snippets."""
+    section: str = Field(description="Section where the issue occurs, e.g. Introduction, Sub-demand 1, Body Flow")
+    issue_detected: str = Field(description="Clear diagnosis of what is missing, weak, or inaccurate")
+    mark_impact: str = Field(description="Why this specific issue penalizes the candidate in UPSC grading")
+    prescription: str = Field(description="Exact pedagogical guidance on how to fix or rewrite it")
+    plug_and_play_snippet: str = Field(description="Ready-to-use text, keyword, or formatted bullet to insert")
+
+
+class EvaluationInput(BaseModel):
+    """Normalized input payload received from OCR or user submission."""
+    question_text: str = Field(description="The UPSC question statement")
+    question_marks: int = Field(default=15, description="Maximum marks for the question (typically 10 or 15)")
+    full_markdown_text: str = Field(default="", description="The candidate's transcribed answer in Markdown")
+    detected_intro: Optional[str] = Field(default="", description="The opening paragraph(s) of the answer")
+    detected_conclusion: Optional[str] = Field(default="", description="The final concluding paragraph of the answer")
+    estimated_word_count: int = Field(default=0, description="Estimated total word count of written answer")
+    legibility_status: Optional[str] = Field(default="AVERAGE", description="CLEAR, AVERAGE, or POOR")
+    subject_paper: str = Field(default="GS-1", description="General Studies paper code: GS-1, GS-2, etc.")
+
+    @field_validator("question_marks", mode="before")
+    @classmethod
+    def parse_marks(cls, v: Any) -> int:
+        if isinstance(v, str):
+            try:
+                return int(v.strip())
+            except ValueError:
+                return 15
+        return int(v) if v is not None else 15
+
+    @field_validator("detected_intro", "detected_conclusion", mode="before")
+    @classmethod
+    def sanitize_strings(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+
+class DemandEvaluation(BaseModel):
+    """Evaluation of question demand fulfillment and directive adherence."""
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    sub_parts_identified: List[str] = Field(default_factory=list, description="Explicit and implicit sub-demands")
+    sub_parts_addressed: List[str] = Field(default_factory=list, description="Sub-demands adequately answered")
+    unaddressed_sub_parts: List[str] = Field(default_factory=list, description="Sub-demands skipped or weak")
+    directive_adherence_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Score 0-10 on directive")
+    demand_coverage_pct: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of demand met")
+    critique: str = Field(default="", description="Analytical critique of demand coverage")
+    improvements: List[ActionableImprovement] = Field(default_factory=list)
+
+    @classmethod
+    def fallback(cls, reason: str = "Agent unavailable") -> "DemandEvaluation":
+        return cls(
+            status="FAILED",
+            directive_adherence_score=5.0,
+            demand_coverage_pct=50.0,
+            critique=f"Demand evaluation fallback activated: {reason}",
+            improvements=[
+                ActionableImprovement(
+                    section="Demand & Directive",
+                    issue_detected="Evaluation fell back to default due to transient error.",
+                    mark_impact="Uncertain demand coverage score.",
+                    prescription="Ensure all keywords in the question are addressed directly in subheadings.",
+                    plug_and_play_snippet="Address each sub-demand under distinct, explicit headings."
+                )
+            ]
+        )
+
+
+class IntroEvaluation(BaseModel):
+    """Evaluation of the introduction's clarity, conciseness, and relevance."""
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    intro_present: bool = Field(default=True, description="Whether an introduction was detected")
+    conciseness_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Word economy (ideal 30-40 words)")
+    contextual_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Definition or historical origin grounding")
+    intro_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Overall intro score 0-10")
+    critique: str = Field(default="", description="Critique of the introduction")
+    improvements: List[ActionableImprovement] = Field(default_factory=list)
+    model_intro_rewrite: str = Field(default="", description="Ready-to-use model introduction rewrite")
+
+    @classmethod
+    def fallback(cls, reason: str = "Agent unavailable") -> "IntroEvaluation":
+        return cls(
+            status="FAILED",
+            intro_score=5.0,
+            critique=f"Intro evaluation fallback activated: {reason}",
+            model_intro_rewrite="[Model intro generation temporarily unavailable]"
+        )
+
+
+class StructureEvaluation(BaseModel):
+    """Evaluation of heading taxonomy, bullet formatting, and argument flow."""
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    heading_taxonomy_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Use of clear question-aligned headers")
+    bullet_discipline_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Use of bold keywords and bullets")
+    structural_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Overall structure score 0-10")
+    critique: str = Field(default="", description="Critique of formatting and flow")
+    improvements: List[ActionableImprovement] = Field(default_factory=list)
+
+    @classmethod
+    def fallback(cls, reason: str = "Agent unavailable") -> "StructureEvaluation":
+        return cls(
+            status="FAILED",
+            structural_score=5.0,
+            critique=f"Structure evaluation fallback activated: {reason}"
+        )
+
+
+class ConclusionEvaluation(BaseModel):
+    """Evaluation of the conclusion's forward-looking perspective and constitutional grounding."""
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    conclusion_present: bool = Field(default=True, description="Whether a conclusion was detected")
+    forward_looking_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Constructive Way Forward or legacy")
+    balance_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Synthesis of arguments without repetition")
+    conclusion_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Overall conclusion score 0-10")
+    critique: str = Field(default="", description="Critique of the conclusion")
+    improvements: List[ActionableImprovement] = Field(default_factory=list)
+    model_conclusion_rewrite: str = Field(default="", description="Ready-to-use model conclusion rewrite")
+
+    @classmethod
+    def fallback(cls, reason: str = "Agent unavailable") -> "ConclusionEvaluation":
+        return cls(
+            status="FAILED",
+            conclusion_score=5.0,
+            critique=f"Conclusion evaluation fallback activated: {reason}",
+            model_conclusion_rewrite="[Model conclusion generation temporarily unavailable]"
+        )
+
+
+class FactualClaimCheck(BaseModel):
+    """Verification record of an extracted factual assertion."""
+    claim: str = Field(description="The specific factual claim made by the candidate")
+    verdict: Literal["VERIFIED", "INCORRECT", "UNVERIFIED"] = Field(description="RAG verification result")
+    grounded_evidence: Optional[str] = Field(default=None, description="Supporting passage from the RAG store")
+    correction: Optional[str] = Field(default=None, description="Factual correction if incorrect")
+    source_citation: Optional[str] = Field(default=None, description="Source book, chapter, or page number")
+
+
+class KnowledgeEvaluation(BaseModel):
+    """Evaluation of factual accuracy grounded against reference knowledge store."""
+    status: Literal["SUCCESS", "FAILED", "SKIPPED"] = "SUCCESS"
+    claims_checked: List[FactualClaimCheck] = Field(default_factory=list)
+    factual_accuracy_score: float = Field(default=0.0, ge=0.0, le=10.0, description="Score 0-10 on factual precision")
+    syllabus_enrichments: List[str] = Field(default_factory=list, description="Core syllabus terms/concepts to inject")
+    critique: str = Field(default="", description="Critique of subject depth and accuracy")
+    improvements: List[ActionableImprovement] = Field(default_factory=list)
+
+    @classmethod
+    def fallback(cls, reason: str = "Agent unavailable") -> "KnowledgeEvaluation":
+        return cls(
+            status="FAILED",
+            factual_accuracy_score=5.0,
+            critique=f"Knowledge evaluation fallback activated: {reason}"
+        )
+
+
+class DimensionScore(BaseModel):
+    """Score breakdown for a single evaluation dimension."""
+    dimension_name: str
+    raw_score_out_of_10: float
+    weight_pct: float
+    effective_marks: float
+
+
+class ConsolidatedScorecard(BaseModel):
+    """Calibrated numerical scorecard scaled to authentic UPSC standards."""
+    total_score: float = Field(description="Total marks awarded out of max_marks")
+    max_marks: int = Field(description="10 or 15 marks")
+    percentage: float = Field(description="Score as a percentage")
+    benchmark_verdict: str = Field(description="Below Average / Average / Good / Topper Quality")
+    dimensions: Dict[str, DimensionScore] = Field(default_factory=dict)
+    penalties_applied: List[str] = Field(default_factory=list)
+
+
+class TransformationRoadmap(BaseModel):
+    """3-step progressive blueprint to transform candidate's answer into topper quality."""
+    current_level_summary: str = Field(description="Realistic diagnosis of the answer's current state")
+    step_1_good_answer: List[str] = Field(description="Key fixes to push this answer to a solid 55% mark")
+    step_2_topper_answer: List[str] = Field(description="High-yield enhancements to push this answer to 70%+ (Topper)")
+
+
+class ComprehensiveEvaluationReport(BaseModel):
+    """Final consolidated evaluation report delivered to the candidate."""
+    scorecard: ConsolidatedScorecard
+    executive_summary: str
+    demand_evaluation: DemandEvaluation
+    intro_evaluation: IntroEvaluation
+    structure_evaluation: StructureEvaluation
+    conclusion_evaluation: ConclusionEvaluation
+    knowledge_evaluation: KnowledgeEvaluation
+    transformation_roadmap: TransformationRoadmap
+    top_value_additions: List[str] = Field(default_factory=list)
+    total_latency_seconds: float = 0.0
+    is_empty_submission: bool = False
