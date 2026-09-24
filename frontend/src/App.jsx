@@ -685,17 +685,6 @@ export default function App() {
               <div className="action-row">
                 <button
                   type="button"
-                  className="sample-test-btn"
-                  onClick={handleEvaluateSample}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                  </svg>
-                  <span>Try Sample Answer</span>
-                </button>
-
-                <button
-                  type="button"
                   className="evaluate-btn"
                   disabled={!selectedFile}
                   onClick={handleEvaluate}
