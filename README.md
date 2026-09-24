@@ -63,7 +63,7 @@ The evaluation pipeline includes built-in tracing and monitoring powered by [Lan
 - [ ] Support multi-page PDF batch processing with individual page-level annotations
 - [ ] User authentication
 - [ ] Historical performance trend tracking across attempts
-- [ ] Support for open-source vision & reasoning models (e.g. Qwen2.5-VL, DeepSeek-R1)
+- [ ] Support for open-source vision & reasoning models (e.g. PaddleOCR-VL, Qwen2.5-VL, DeepSeek-R1)
 - [ ] Custom evaluation rubrics and subject-specific weightage customization (GS1 vs GS2/3/4)
 - [ ] Custom knowledge base as a vector database to retrieve relevant information for the answer evaluation due to LLMs cut-off date.
 - [ ] Real-time streaming evaluation updates via SSE
