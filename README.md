@@ -10,8 +10,8 @@ An autonomous multi-agent engine to evaluate UPSC Mains handwritten and digital 
 
 ```mermaid
 graph TD
-    A[User / Client] -->|Upload PDF / Text| B[FastAPI Backend]
-    B -->|Convert & OCR| C[Vision & PDF Processing]
+    A[User / Client] -->|Upload PDF| B[FastAPI Backend]
+    B --> C[Vision & PDF Processing]
     C -->|Extracted Question & Answer| D[Deterministic Native DAG Fan-Out]
     
     subgraph Specialist Agents [Panel of Judges]
