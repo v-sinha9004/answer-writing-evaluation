@@ -132,6 +132,8 @@ For each claim:
 3. Assign a factual_accuracy_score (0-10).
 4. Suggest 2-3 core syllabus concepts from the reference text to enrich the answer.
 5. Provide ActionableImprovement items with ready-to-insert corrections.
+6. Mark INCORRECT only when contradictory/opposite claims are provided otherwise mark it as UNVERIFIED.
+7. Don't mark a claim as INCORRECT if the answer is partially correct or not fully mentioned.
 """
 
         result, verification_usage = await self.run_structured_with_usage(
