@@ -35,62 +35,21 @@ graph TD
 
 ---
 
-## 🚀 Deployment Guide
+## 🚀 Deployment
 
-The platform is split into a **FastAPI backend** (containerized on Render) and a **React + Vite frontend** (hosted on Vercel).
+The platform is deployed across two services:
 
-### 1. Backend Deployment (Render)
-
-The backend is deployed as a **Docker Web Service** on Render to ensure system-level dependencies (such as `poppler-utils` for PDF rendering) are available.
-
-#### Setup Steps:
-1. **Create a New Web Service** on [Render](https://render.com).
-2. Connect your Git repository.
-3. Configure the service settings:
-   - **Environment**: `Docker`
-   - **Dockerfile Path**: `./Dockerfile`
-   - **Docker Context**: `.`
-   - **Health Check Path**: `/api/health`
-4. **Environment Variables**:
-   Add the following variables in the Render Dashboard (**Environment** tab):
-
-| Variable | Description | Example / Default |
-| :--- | :--- | :--- |
-| `OPENAI_API_KEY` | OpenAI API key for LLM agents & embeddings | `sk-proj-...` |
-| `OPENAI_MODEL` | Default model for evaluation agents | `gpt-4o` |
-| `DATABASE_BACKEND` | Database persistence (`supabase` or `sqlite`) | `supabase` |
-| `SUPABASE_URL` | Supabase project URL | `https://your-project.supabase.co` |
-| `SUPABASE_ANON_KEY` | Supabase anonymous API key | `eyJh...` |
-| `SUPABASE_STORAGE_BUCKET`| Supabase bucket name for uploaded answer PDFs | `evaluations` |
-| `LANGFUSE_PUBLIC_KEY` | *(Optional)* Langfuse public key | `pk-lf-...` |
-| `LANGFUSE_SECRET_KEY` | *(Optional)* Langfuse secret key | `sk-lf-...` |
-| `LANGFUSE_HOST` | *(Optional)* Langfuse host URL | `https://cloud.langfuse.com` |
-
-> [!NOTE]
-> Render automatically injects the dynamic `$PORT` environment variable. The `Dockerfile` binds Uvicorn to `0.0.0.0:${PORT:-8000}`.
+- **Backend (Render)**: The FastAPI server is deployed as a Docker service on [Render](https://render.com) using the included [Dockerfile](./Dockerfile).
+- **Frontend (Vercel)**: The React + Vite client is deployed on [Vercel](https://vercel.com) from the `frontend/` directory, connecting to the Render backend via `VITE_API_BASE_URL`.
 
 ---
 
-### 2. Frontend Deployment (Vercel)
+## 📊 Observability (Langfuse)
 
-The frontend is a single-page React application built with Vite, deployed seamlessly on [Vercel](https://vercel.com).
-
-#### Setup Steps:
-1. **Import Project** on Vercel from your GitHub/GitLab account.
-2. Configure project build settings:
-   - **Framework Preset**: `Vite`
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-   - **Install Command**: `npm install`
-3. **Environment Variables**:
-   Set the backend API connection URL:
-
-| Variable | Description | Example |
-| :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | Base URL of your deployed Render backend | `https://answer-writing-evaluation.onrender.com` |
-
-4. Click **Deploy**. Vercel will build and assign an automated production URL (e.g., `https://answer-writing-evaluation.vercel.app`).
+The evaluation pipeline includes built-in tracing and monitoring powered by [Langfuse](https://langfuse.com):
+- **Multi-Agent Tracing**: Tracks prompts, model calls, latency, token usage, and outputs across all specialist judge agents and the Master Arbiter.
+- **Pipeline Spans**: Traces end-to-end stages including PDF/OCR processing, parallel DAG execution, and database persistence.
+- **Zero Overhead Setup**: Enabled automatically when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are configured in environment variables.
 
 ---
 
@@ -139,30 +98,3 @@ You can also launch both services concurrently using the helper script:
 chmod +x run_dev.sh
 ./run_dev.sh
 ```
-
----
-
-## 📁 Repository Structure
-
-```
-├── Dockerfile                  # Production container definition for Render
-├── README.md                   # Project documentation
-├── requirements.txt            # Python backend dependencies
-├── run_dev.sh                  # One-click local development script
-├── frontend/                   # React + Vite Frontend application
-│   ├── src/                    # React components and styling
-│   ├── package.json            # Frontend dependencies & scripts
-│   └── vite.config.js          # Vite build config
-├── src/                        # Evaluation Engine Backend
-│   ├── api/                    # FastAPI endpoints & server
-│   ├── evaluator/              # Multi-agent DAG orchestrator & agents
-│   │   ├── agents/             # Specialist judge agents & Master Arbiter
-│   │   ├── orchestrator.py     # Deterministic DAG execution engine
-│   │   ├── pdf_processor.py    # PDF to image conversion & OCR extraction
-│   │   └── schemas.py          # Pydantic data schemas
-│   ├── db/                     # SQLite & Supabase repository layer
-│   ├── services/               # Storage services (local / Supabase)
-│   └── config.py               # Global settings & environment loader
-└── tests/                      # Pytest evaluation suite
-```
-
