@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PdfViewer from './components/PdfViewer';
 import EvaluationReport from './components/EvaluationReport';
+import { API_ENDPOINTS, resolvePdfUrl, getBackendHostLabel } from './config/api';
 import './App.css';
 
 const PAPERS = [
@@ -112,7 +113,7 @@ export default function App() {
   const fetchEvaluations = async () => {
     try {
       setHistoryLoading(true);
-      const res = await fetch('/api/evaluations');
+      const res = await fetch(API_ENDPOINTS.evaluations);
       if (res.ok) {
         const data = await res.json();
         setEvaluationsList(data);
@@ -148,10 +149,11 @@ export default function App() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/evaluations/${evalId}`);
+      const res = await fetch(API_ENDPOINTS.evaluationById(evalId));
       if (!res.ok) throw new Error('Could not load evaluation record');
       const data = await res.json();
-      const pdfLink = data.pdf_url || data.report?.pdf_url;
+      const rawPdfLink = data.pdf_url || data.report?.pdf_url;
+      const pdfLink = resolvePdfUrl(rawPdfLink);
       const loadedReport = {
         ...data.report,
         pdf_url: pdfLink,
@@ -184,7 +186,7 @@ export default function App() {
     if (!window.confirm('Delete this evaluation record from database?')) return;
     setDeletingId(evalId);
     try {
-      const res = await fetch(`/api/evaluations/${evalId}`, { method: 'DELETE' });
+      const res = await fetch(API_ENDPOINTS.evaluationById(evalId), { method: 'DELETE' });
       if (res.ok) {
         setEvaluationsList((prev) => prev.filter((item) => item.id !== evalId));
         if (selectedEvaluationMeta?.id === evalId) {
@@ -232,7 +234,7 @@ export default function App() {
         formData.append('question', questionText.trim());
       }
 
-      const res = await fetch('/api/evaluate', {
+      const res = await fetch(API_ENDPOINTS.evaluate, {
         method: 'POST',
         body: formData,
       });
@@ -243,14 +245,15 @@ export default function App() {
       }
 
       const data = await res.json();
-      setReport(data);
+      const resolvedPdf = resolvePdfUrl(data.pdf_url);
+      setReport({ ...data, pdf_url: resolvedPdf });
       setSelectedEvaluationMeta({
         id: data.id,
         created_at: data.created_at,
         filename: selectedFile.name,
         paper: paper,
         marks: marks,
-        pdf_url: data.pdf_url,
+        pdf_url: resolvedPdf,
       });
       setViewMode('split');
       fetchEvaluations();
@@ -273,7 +276,7 @@ export default function App() {
       formData.append('paper', paper);
       formData.append('marks', marks.toString());
 
-      const res = await fetch('/api/evaluate-sample', {
+      const res = await fetch(API_ENDPOINTS.evaluateSample, {
         method: 'POST',
         body: formData,
       });
@@ -284,16 +287,17 @@ export default function App() {
       }
 
       const data = await res.json();
-      setReport(data);
+      const resolvedPdf = resolvePdfUrl(data.pdf_url);
+      setReport({ ...data, pdf_url: resolvedPdf });
       setSelectedEvaluationMeta({
         id: data.id,
         created_at: data.created_at,
         filename: 'Sample Copy (Press in India)',
         paper: paper,
         marks: marks,
-        pdf_url: data.pdf_url,
+        pdf_url: resolvedPdf,
       });
-      setViewMode(data.pdf_url ? 'split' : 'report');
+      setViewMode(resolvedPdf ? 'split' : 'report');
       fetchEvaluations();
     } catch (err) {
       console.error(err);
@@ -337,6 +341,11 @@ export default function App() {
         </div>
 
         <div className="header-actions">
+          <div className="header-badge" title={`Active Backend: ${getBackendHostLabel()}`}>
+            <span className="status-dot"></span>
+            <span>API: {getBackendHostLabel()}</span>
+          </div>
+
           <button
             type="button"
             className="history-nav-btn"
@@ -733,7 +742,7 @@ export default function App() {
                   <h2 className="drawer-title">Evaluation History</h2>
                 </div>
                 <p className="drawer-subtitle">
-                  {evaluationsList.length} saved {evaluationsList.length === 1 ? 'copy' : 'copies'} in SQLite database
+                  {evaluationsList.length} saved {evaluationsList.length === 1 ? 'copy' : 'copies'} in database
                 </p>
               </div>
               <button
