@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import MarkdownText from './components/MarkdownText';
+import PdfViewer from './components/PdfViewer';
+import EvaluationReport from './components/EvaluationReport';
 import './App.css';
 
 const PAPERS = [
@@ -23,6 +24,10 @@ export default function App() {
   const [report, setReport] = useState(null);
   const [copiedType, setCopiedType] = useState(null);
 
+  // View Mode: 'split' | 'report' | 'pdf'
+  const [viewMode, setViewMode] = useState('split');
+  const [localPdfBlobUrl, setLocalPdfBlobUrl] = useState(null);
+
   // History & Database Persistence State
   const [historyOpen, setHistoryOpen] = useState(false);
   const [evaluationsList, setEvaluationsList] = useState([]);
@@ -33,6 +38,18 @@ export default function App() {
 
   const fileInputRef = useRef(null);
 
+  // Derive active PDF URL and filename from available sources
+  const activePdfUrl =
+    report?.pdf_url ||
+    selectedEvaluationMeta?.pdf_url ||
+    localPdfBlobUrl;
+
+  const activePdfFilename =
+    report?.filename ||
+    selectedEvaluationMeta?.filename ||
+    selectedFile?.name ||
+    'Candidate Answer Copy.pdf';
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -40,7 +57,11 @@ export default function App() {
         setError('Please select a valid PDF file (.pdf)');
         return;
       }
+      if (localPdfBlobUrl) {
+        URL.revokeObjectURL(localPdfBlobUrl);
+      }
       setSelectedFile(file);
+      setLocalPdfBlobUrl(URL.createObjectURL(file));
       setError(null);
     }
   };
@@ -63,9 +84,21 @@ export default function App() {
         setError('Please drop a valid PDF file (.pdf)');
         return;
       }
+      if (localPdfBlobUrl) {
+        URL.revokeObjectURL(localPdfBlobUrl);
+      }
       setSelectedFile(file);
+      setLocalPdfBlobUrl(URL.createObjectURL(file));
       setError(null);
     }
+  };
+
+  const handleRemoveFile = () => {
+    if (localPdfBlobUrl) {
+      URL.revokeObjectURL(localPdfBlobUrl);
+      setLocalPdfBlobUrl(null);
+    }
+    setSelectedFile(null);
   };
 
   const formatFileSize = (bytes) => {
@@ -118,7 +151,12 @@ export default function App() {
       const res = await fetch(`/api/evaluations/${evalId}`);
       if (!res.ok) throw new Error('Could not load evaluation record');
       const data = await res.json();
-      setReport(data.report);
+      const pdfLink = data.pdf_url || data.report?.pdf_url;
+      const loadedReport = {
+        ...data.report,
+        pdf_url: pdfLink,
+      };
+      setReport(loadedReport);
       setSelectedEvaluationMeta({
         id: data.id,
         created_at: data.created_at,
@@ -126,9 +164,11 @@ export default function App() {
         marks: data.marks,
         question_text: data.question_text,
         filename: data.filename,
+        pdf_url: pdfLink,
       });
       setPaper(data.paper || 'GS-1');
       setMarks(data.marks || 15);
+      setViewMode(pdfLink ? 'split' : 'report');
       setHistoryOpen(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -210,7 +250,9 @@ export default function App() {
         filename: selectedFile.name,
         paper: paper,
         marks: marks,
+        pdf_url: data.pdf_url,
       });
+      setViewMode('split');
       fetchEvaluations();
     } catch (err) {
       console.error(err);
@@ -249,7 +291,9 @@ export default function App() {
         filename: 'Sample Copy (Press in India)',
         paper: paper,
         marks: marks,
+        pdf_url: data.pdf_url,
       });
+      setViewMode(data.pdf_url ? 'split' : 'report');
       fetchEvaluations();
     } catch (err) {
       console.error(err);
@@ -261,16 +305,22 @@ export default function App() {
   };
 
   const copyToClipboard = (text, type) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedType(type);
     setTimeout(() => setCopiedType(null), 2000);
   };
 
   const resetAll = () => {
+    if (localPdfBlobUrl) {
+      URL.revokeObjectURL(localPdfBlobUrl);
+      setLocalPdfBlobUrl(null);
+    }
     setReport(null);
     setSelectedFile(null);
     setError(null);
     setSelectedEvaluationMeta(null);
+    setViewMode('split');
   };
 
   return (
@@ -302,12 +352,11 @@ export default function App() {
               <span className="history-badge-count">{evaluationsList.length}</span>
             )}
           </button>
-
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="main-content">
+      <main className={`main-content ${report ? (viewMode === 'split' && activePdfUrl ? 'workspace-split' : (viewMode === 'pdf' ? 'workspace-pdf-full' : 'workspace-report-full')) : ''}`}>
         {!report && (
           <div className="hero">
             <h1 className="hero-title">UPSC Mains Answer Evaluator</h1>
@@ -318,7 +367,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="evaluator-card">
+        <div className={`evaluator-card ${report && viewMode === 'split' && activePdfUrl ? 'split-card' : ''}`}>
           {loading ? (
             <div className="loading-container">
               <div className="pulse-spinner"></div>
@@ -359,6 +408,51 @@ export default function App() {
                   </svg>
                   <span>Evaluate Another Copy</span>
                 </button>
+
+                {/* View Mode Switcher Pills */}
+                {activePdfUrl && (
+                  <div className="view-mode-selector">
+                    <button
+                      type="button"
+                      className={`view-mode-btn ${viewMode === 'split' ? 'active' : ''}`}
+                      onClick={() => setViewMode('split')}
+                      title="Side-by-side view with PDF copy"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="12" y1="3" x2="12" y2="21"></line>
+                      </svg>
+                      <span>Side-by-Side</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`view-mode-btn ${viewMode === 'report' ? 'active' : ''}`}
+                      onClick={() => setViewMode('report')}
+                      title="Evaluation report only"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                      </svg>
+                      <span>Report Only</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`view-mode-btn ${viewMode === 'pdf' ? 'active' : ''}`}
+                      onClick={() => setViewMode('pdf')}
+                      title="Original PDF answer copy only"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                      </svg>
+                      <span>PDF Only</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="results-header-actions">
                   <button
                     type="button"
@@ -397,6 +491,7 @@ export default function App() {
                     <span className="saved-eval-meta">
                       <strong>ID:</strong> {selectedEvaluationMeta.id} &bull; <strong>Saved:</strong> {formatDate(selectedEvaluationMeta.created_at)}
                       {selectedEvaluationMeta.filename ? ` • ${selectedEvaluationMeta.filename}` : ''}
+                      {activePdfUrl ? ' • 📄 PDF Attached' : ''}
                     </span>
                   </div>
                   <button
@@ -409,229 +504,39 @@ export default function App() {
                 </div>
               )}
 
-              {/* Scorecard Hero */}
-              <div className="scorecard-hero">
-                <div className="score-main">
-                  <span className="score-context">{paper} • {marks} MARKS EVALUATION</span>
-                  <div className="score-digits">
-                    <span className="score-number">{report.scorecard.total_score}</span>
-                    <span className="score-total">/ {report.scorecard.max_marks} Marks</span>
+              {/* View Layout Switch */}
+              {viewMode === 'split' && activePdfUrl ? (
+                <div className="eval-split-layout">
+                  <div className="eval-pdf-column">
+                    <PdfViewer pdfUrl={activePdfUrl} filename={activePdfFilename} />
                   </div>
-                  <div className="score-badges">
-                    <span className="verdict-badge">{report.scorecard.benchmark_verdict}</span>
-                    <span className="percentage-badge">{report.scorecard.percentage}% Calibrated Score</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Penalties Alert if any */}
-              {report.scorecard.penalties_applied && report.scorecard.penalties_applied.length > 0 && (
-                <div className="error-banner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                  <div>
-                    <strong>Penalties Applied:</strong> {report.scorecard.penalties_applied.join(' | ')}
+                  <div className="eval-report-column">
+                    <EvaluationReport
+                      report={report}
+                      paper={paper}
+                      marks={marks}
+                      copyToClipboard={copyToClipboard}
+                      copiedType={copiedType}
+                      onReset={resetAll}
+                    />
                   </div>
                 </div>
-              )}
-
-
-              {/* 5-Parameter Dimension Breakdown */}
-              <div>
-                <h3 className="section-title">📊 Parameter-Wise Scorecard Breakdown</h3>
-                <div className="dimensions-grid">
-                  {Object.entries(report.scorecard.dimensions || {}).map(([dimName, ds]) => (
-                    <div key={dimName} className="dimension-card">
-                      <div className="dim-top">
-                        <span className="dim-name">{dimName}</span>
-                        <span className="dim-weight">{ds.weight_pct}% Weight</span>
-                      </div>
-                      <div className="dim-score-row">
-                        <span className="dim-raw-score">{ds.raw_score_out_of_10}/10</span>
-                        <span className="dim-effective">{ds.effective_marks.toFixed(2)} marks</span>
-                      </div>
-                      <div className="dim-progress-track">
-                        <div
-                          className="dim-progress-bar"
-                          style={{ width: `${(ds.raw_score_out_of_10 / 10) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
+              ) : viewMode === 'pdf' && activePdfUrl ? (
+                <div className="eval-full-pdf-layout">
+                  <PdfViewer pdfUrl={activePdfUrl} filename={activePdfFilename} />
                 </div>
-              </div>
-
-              {/* Model Rewrites */}
-              <div>
-                <h3 className="section-title">✍️ Model Introduction & Conclusion Rewrites</h3>
-                <div className="rewrites-section">
-                  <div className="rewrite-card">
-                    <div className="rewrite-header">
-                      <span className="rewrite-tag">Model Intro Rewrite</span>
-                      <button
-                        className="copy-btn"
-                        onClick={() => copyToClipboard(report.intro_evaluation.model_intro_rewrite, 'intro')}
-                      >
-                        {copiedType === 'intro' ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                    <div className="rewrite-body">
-                      <MarkdownText text={report.intro_evaluation.model_intro_rewrite || 'N/A'} />
-                    </div>
-                  </div>
-
-                  <div className="rewrite-card">
-                    <div className="rewrite-header">
-                      <span className="rewrite-tag">Model Conclusion Rewrite</span>
-                      <button
-                        className="copy-btn"
-                        onClick={() => copyToClipboard(report.conclusion_evaluation.model_conclusion_rewrite, 'conclusion')}
-                      >
-                        {copiedType === 'conclusion' ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                    <div className="rewrite-body">
-                      <MarkdownText text={report.conclusion_evaluation.model_conclusion_rewrite || 'N/A'} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Steps for a Good Answer */}
-              {report.transformation_roadmap && (
-                <div>
-                  <h3 className="section-title">🚀 Steps for a Good Answer</h3>
-                  <div className="roadmap-container">
-                    {report.transformation_roadmap.current_level_summary && (
-                      <div className="roadmap-summary">
-                        <strong>Current Assessment:</strong>{' '}
-                        <MarkdownText text={report.transformation_roadmap.current_level_summary} inline />
-                      </div>
-                    )}
-                    <div className={report.transformation_roadmap.step_2_topper_answer && report.transformation_roadmap.step_2_topper_answer.length > 0 ? "roadmap-columns" : "roadmap-single-column"}>
-                      <div className="roadmap-col">
-                        <div className="col-header step1">Key Action Steps to Reach 55%+ (Solid Answer)</div>
-                        <ul className="roadmap-list">
-                          {(report.transformation_roadmap.good_answer_steps || report.transformation_roadmap.step_1_good_answer)?.map((item, idx) => (
-                            <li key={idx} className="roadmap-item">
-                              <span className="item-bullet">•</span>
-                              <div className="roadmap-item-content">
-                                <MarkdownText text={item} />
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {report.transformation_roadmap.step_2_topper_answer && report.transformation_roadmap.step_2_topper_answer.length > 0 && (
-                        <div className="roadmap-col">
-                          <div className="col-header step2">Step 2: Additions to reach 70%+ (Topper Level)</div>
-                          <ul className="roadmap-list">
-                            {report.transformation_roadmap.step_2_topper_answer?.map((item, idx) => (
-                              <li key={idx} className="roadmap-item">
-                                <span className="item-bullet">•</span>
-                                <div className="roadmap-item-content">
-                                  <MarkdownText text={item} />
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              ) : (
+                <div className="eval-single-report-layout">
+                  <EvaluationReport
+                    report={report}
+                    paper={paper}
+                    marks={marks}
+                    copyToClipboard={copyToClipboard}
+                    copiedType={copiedType}
+                    onReset={resetAll}
+                  />
                 </div>
               )}
-
-              {/* Top Value Additions */}
-              {report.top_value_additions && report.top_value_additions.length > 0 && (
-                <div>
-                  <h3 className="section-title">💡 Top Value Additions</h3>
-                  <div className="value-additions-grid">
-                    {report.top_value_additions.map((va, idx) => (
-                      <div key={idx} className="va-card">
-                        <div className="va-number">{idx + 1}</div>
-                        <div className="va-text">
-                          <MarkdownText text={va} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* RAG Fact Check Audit */}
-              {report.knowledge_evaluation?.claims_checked?.filter((c) => c.verdict === 'INCORRECT').length > 0 && (
-                <div>
-                  <h3 className="section-title">🔍 Incorrect Facts</h3>
-                  <div className="facts-list">
-                    {report.knowledge_evaluation.claims_checked
-                      .filter((claim) => claim.verdict === 'INCORRECT')
-                      .map((claim, idx) => (
-                        <div key={idx} className="fact-item">
-                          <div className="fact-top">
-                            <span className="fact-verdict incorrect">
-                              {claim.verdict}
-                            </span>
-                            <span className="fact-claim">
-                              "<MarkdownText text={claim.claim} inline />"
-                            </span>
-                          </div>
-                          {claim.correction && (
-                            <div className="fact-correction">
-                              <strong>Correction:</strong>{' '}
-                              <MarkdownText text={claim.correction} inline />
-                            </div>
-                          )}
-                          {claim.grounded_evidence && (
-                            <div className="fact-evidence">
-                              <strong>Evidence:</strong>{' '}
-                              <MarkdownText text={claim.grounded_evidence} inline />
-                              {claim.source_citation && ` (${claim.source_citation})`}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Pedagogical Actionable Improvements */}
-              {report.demand_evaluation?.improvements && report.demand_evaluation.improvements.length > 0 && (
-                <div>
-                  <h3 className="section-title">🎯 Actionable Improvements & Snippets</h3>
-                  <div className="improvements-list">
-                    {report.demand_evaluation.improvements.map((imp, idx) => (
-                      <div key={idx} className="improvement-card">
-                        <div className="imp-header">
-                          <span className="imp-section">{imp.section}</span>
-                          <span className="imp-impact">⚠️ {imp.mark_impact}</span>
-                        </div>
-                        <div className="imp-issue">
-                          <MarkdownText text={imp.issue_detected} inline />
-                        </div>
-                        <div className="imp-prescription">
-                          <MarkdownText text={imp.prescription} />
-                        </div>
-                        {imp.plug_and_play_snippet && (
-                          <div className="imp-snippet">
-                            <MarkdownText text={imp.plug_and_play_snippet} />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="results-footer">
-                <button className="new-eval-btn" onClick={resetAll}>
-                  Evaluate Another Answer Copy
-                </button>
-              </div>
             </div>
           ) : (
             /* Upload & Configuration View */
@@ -677,7 +582,7 @@ export default function App() {
                       <button className="change-btn" onClick={() => fileInputRef.current?.click()}>
                         Change
                       </button>
-                      <button className="remove-btn" onClick={() => setSelectedFile(null)}>
+                      <button className="remove-btn" onClick={handleRemoveFile}>
                         Remove
                       </button>
                     </div>
@@ -888,6 +793,11 @@ export default function App() {
                         <div className="card-tags">
                           <span className="history-paper-tag">{item.paper}</span>
                           <span className="history-marks-tag">{item.marks} Marks</span>
+                          {item.pdf_url && (
+                            <span className="history-pdf-tag" title="PDF Copy Attached">
+                              📄 PDF
+                            </span>
+                          )}
                         </div>
                         <span className="history-date">{formatDate(item.created_at)}</span>
                       </div>

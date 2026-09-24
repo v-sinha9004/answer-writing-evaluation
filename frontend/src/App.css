@@ -1698,3 +1698,316 @@
   max-width: 300px;
 }
 
+
+/* ==========================================================================
+   Side-by-Side Evaluation Workspace & Embedded PDF Viewer
+   ========================================================================== */
+
+/* Adaptive Workspace Layout */
+.main-content.workspace-split {
+  max-width: 1720px;
+  width: 96%;
+  padding: 24px 20px 80px;
+}
+
+.main-content.workspace-pdf-full {
+  max-width: 1300px;
+  width: 95%;
+  padding: 24px 20px 80px;
+}
+
+.main-content.workspace-report-full {
+  max-width: 960px;
+  width: 100%;
+}
+
+.evaluator-card.split-card {
+  padding: 24px 28px;
+  background-color: var(--color-card-bg);
+}
+
+/* Header Bar & View Switcher */
+.results-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.view-mode-selector {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.view-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.view-mode-btn:hover {
+  color: #1e293b;
+}
+
+.view-mode-btn.active {
+  background: #ffffff;
+  color: var(--color-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-weight: 700;
+}
+
+/* Two-Column Side-by-Side Split Grid */
+.eval-split-layout {
+  display: grid;
+  grid-template-columns: minmax(440px, 46%) 1fr;
+  gap: 28px;
+  align-items: start;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.eval-pdf-column {
+  position: sticky;
+  top: 88px;
+  height: calc(100vh - 124px);
+  min-height: 720px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.eval-report-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.eval-full-pdf-layout {
+  width: 100%;
+  height: calc(100vh - 160px);
+  min-height: 800px;
+  margin-top: 8px;
+}
+
+.eval-single-report-layout {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* Flow container for evaluation report cards */
+.report-content-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+}
+
+/* PDF Viewer Panel Styling */
+.pdf-viewer-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0f172a;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+
+.pdf-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #0f172a;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.pdf-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pdf-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 92, 53, 0.2);
+  color: #ff8c6d;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 92, 53, 0.4);
+  flex-shrink: 0;
+}
+
+.pdf-filename {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.pdf-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pdf-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 5px 11px;
+  border-radius: 6px;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pdf-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.pdf-download-btn {
+  background: rgba(255, 92, 53, 0.22);
+  color: #ff9d82;
+  border-color: rgba(255, 92, 53, 0.4);
+}
+
+.pdf-download-btn:hover {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.pdf-frame-wrapper {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: #1e293b;
+  overflow: hidden;
+}
+
+.pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #ffffff;
+}
+
+.pdf-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #94a3b8;
+  font-size: 0.85rem;
+  z-index: 2;
+}
+
+/* Fallback Empty State for PDF */
+.pdf-viewer-empty {
+  padding: 48px 24px;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: var(--radius-lg);
+  border: 2px dashed #cbd5e1;
+  color: #64748b;
+}
+
+.pdf-empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.pdf-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.pdf-empty-desc {
+  font-size: 0.85rem;
+  max-width: 360px;
+  margin: 0 auto;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* History Card PDF Tag */
+.history-pdf-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0369a1;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Responsive adjustments for Side-by-Side */
+@media (max-width: 1180px) {
+  .eval-split-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .eval-pdf-column {
+    position: static;
+    height: 600px;
+    min-height: auto;
+  }
+
+  .main-content.workspace-split {
+    max-width: 950px;
+    padding: 20px 16px 60px;
+  }
+}

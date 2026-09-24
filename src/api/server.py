@@ -33,6 +33,7 @@ def persist_report_to_db(
     filename: str,
     ocr_json: Optional[str] = None,
     pdf_url: Optional[str] = None,
+    eval_id: Optional[str] = None,
 ) -> str:
     """Persist evaluation to database within an observed span."""
     return save_evaluation(
@@ -41,6 +42,7 @@ def persist_report_to_db(
         filename=filename,
         ocr_json=ocr_json,
         pdf_url=pdf_url,
+        eval_id=eval_id,
     )
 
 
@@ -143,6 +145,7 @@ async def evaluate_pdf(
                     filename=filename,
                     ocr_json=input_data.ocr_json,
                     pdf_url=pdf_url,
+                    eval_id=eval_id,
                 )
                 logger.info(f"Persisted evaluation to database with ID: {saved_id}")
             except Exception as db_err:

@@ -72,6 +72,7 @@ def save_evaluation(
     filename: Optional[str] = None,
     ocr_json: Optional[Union[str, Dict[str, Any]]] = None,
     pdf_url: Optional[str] = None,
+    eval_id: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> str:
     """Save an evaluation report and candidate answer input into SQLite."""
@@ -80,7 +81,7 @@ def save_evaluation(
     if isinstance(input_data, dict):
         input_data = EvaluationInput.model_validate(input_data)
 
-    eval_id = f"eval_{uuid.uuid4().hex[:12]}"
+    final_id = eval_id or f"eval_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # Determine PDF URL from arguments, input_data or report
@@ -91,7 +92,7 @@ def save_evaluation(
     )
 
     # Enrich report with metadata
-    report.id = eval_id
+    report.id = final_id
     report.created_at = now_iso
     report.paper = input_data.subject_paper
     report.question_text = input_data.question_text
@@ -117,7 +118,7 @@ def save_evaluation(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                eval_id,
+                final_id,
                 now_iso,
                 input_data.subject_paper,
                 input_data.question_marks,
@@ -138,7 +139,7 @@ def save_evaluation(
         )
         conn.commit()
 
-    return eval_id
+    return final_id
 
 
 def get_evaluation(
@@ -156,6 +157,10 @@ def get_evaluation(
             return None
 
         report_dict = json.loads(row["report_json"])
+        if "pdf_url" in row.keys() and row["pdf_url"]:
+            report_dict["pdf_url"] = row["pdf_url"]
+        report_dict["id"] = row["id"]
+
         ocr_data = None
         if "ocr_json" in row.keys() and row["ocr_json"]:
             try:
