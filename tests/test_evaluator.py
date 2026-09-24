@@ -122,12 +122,12 @@ def test_scoring_calibration_math_deterministic():
         fact_eval=fact_eval,
     )
 
-    # Weights: Demand 30%, Fact 35%, Intro 10%, Struct 10%, Concl 15%
-    # Expected: (0.30*6.0 + 0.35*5.0 + 0.10*6.0 + 0.10*7.0 + 0.15*5.0) = 1.8 + 1.75 + 0.6 + 0.7 + 0.75 = 5.60 / 10
-    # Scaled to 15 marks: (5.60 / 10) * 15 = 8.40 / 15
+    # Weights: Demand 40%, Fact 25%, Intro 10%, Struct 10%, Concl 15%
+    # Expected: (0.40*6.0 + 0.25*5.0 + 0.10*6.0 + 0.10*7.0 + 0.15*5.0) = 2.4 + 1.25 + 0.6 + 0.7 + 0.75 = 5.70 / 10
+    # Scaled to 15 marks: (5.70 / 10) * 15 = 8.55 / 15
     assert scorecard.max_marks == 15
-    assert scorecard.total_score == 8.4
-    assert scorecard.percentage == 56.0
+    assert scorecard.total_score == 8.55
+    assert scorecard.percentage == 57.0
     assert "Good / Competitive Mains Standard" in scorecard.benchmark_verdict
     assert len(scorecard.dimensions) == 5
 

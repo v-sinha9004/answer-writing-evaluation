@@ -33,8 +33,8 @@ class MasterScoringAgent(BaseAgent):
     """Computes calibrated mathematical marks, deduplicates feedback, and crafts the transformation roadmap."""
 
     DEFAULT_WEIGHTS = {
-        "demand": 0.30,
-        "knowledge": 0.35,
+        "demand": 0.40,
+        "knowledge": 0.25,
         "intro": 0.10,
         "structure": 0.10,
         "conclusion": 0.15,

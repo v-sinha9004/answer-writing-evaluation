@@ -142,8 +142,8 @@ Your role is to synthesize the specialist evaluations (Demand, Intro, Structure,
 
 ### RESPONSIBILITIES:
 1. CALIBRATED SCORING FORMULA:
-   - Demand & Directive: 30%
-   - Knowledge & Facts: 35%
+   - Demand & Directive: 40%
+   - Knowledge & Facts: 25%
    - Introduction: 10%
    - Structure & Flow: 10%
    - Conclusion & Way Forward: 15%

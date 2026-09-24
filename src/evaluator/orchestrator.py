@@ -88,8 +88,8 @@ class EvaluationOrchestrator:
                 effective_marks=0.0,
             )
             for dim, w in [
-                ("Demand & Directive", 0.30),
-                ("Knowledge & Facts", 0.35),
+                ("Demand & Directive", 0.40),
+                ("Knowledge & Facts", 0.25),
                 ("Introduction", 0.10),
                 ("Structure & Presentation", 0.10),
                 ("Conclusion & Way Forward", 0.15),
