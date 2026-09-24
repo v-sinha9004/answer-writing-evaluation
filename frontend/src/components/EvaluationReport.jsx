@@ -166,69 +166,96 @@ export default function EvaluationReport({
         </div>
       )}
 
-      {/* RAG Fact Check Audit */}
-      {report.knowledge_evaluation?.claims_checked?.filter((c) => c.verdict === 'INCORRECT').length > 0 && (
+      {/* Knowledge & Factual Accuracy Audit */}
+      {report.knowledge_evaluation && (
         <div>
-          <h3 className="section-title">🔍 Incorrect Facts</h3>
-          <div className="facts-list">
-            {report.knowledge_evaluation.claims_checked
-              .filter((claim) => claim.verdict === 'INCORRECT')
-              .map((claim, idx) => (
-                <div key={idx} className="fact-item">
-                  <div className="fact-top">
-                    <span className="fact-verdict incorrect">
-                      {claim.verdict}
-                    </span>
-                    <span className="fact-claim">
-                      "<MarkdownText text={claim.claim} inline />"
-                    </span>
-                  </div>
-                  {claim.correction && (
-                    <div className="fact-correction">
-                      <strong>Correction:</strong>{' '}
-                      <MarkdownText text={claim.correction} inline />
-                    </div>
-                  )}
-                  {claim.grounded_evidence && (
-                    <div className="fact-evidence">
-                      <strong>Evidence:</strong>{' '}
-                      <MarkdownText text={claim.grounded_evidence} inline />
-                      {claim.source_citation && ` (${claim.source_citation})`}
-                    </div>
-                  )}
-                </div>
-              ))}
+          <div className="section-header-row">
+            <h3 className="section-title">🔍 Knowledge & Factual Accuracy Audit</h3>
+            {report.knowledge_evaluation.factual_accuracy_score !== undefined && (
+              <span className="section-score-badge">
+                Accuracy Score: {report.knowledge_evaluation.factual_accuracy_score}/10
+              </span>
+            )}
           </div>
+
+          {/* Claims Checked List */}
+          {report.knowledge_evaluation.claims_checked && report.knowledge_evaluation.claims_checked.length > 0 ? (
+            <div className="facts-list">
+              {report.knowledge_evaluation.claims_checked.map((claim, idx) => {
+                const verdictLower = (claim.verdict || 'unverified').toLowerCase();
+                return (
+                  <div key={idx} className={`fact-item verdict-${verdictLower}`}>
+                    <div className="fact-top">
+                      <span className={`fact-verdict ${verdictLower}`}>
+                        {claim.verdict}
+                      </span>
+                      <span className="fact-claim">
+                        "<MarkdownText text={claim.claim} inline />"
+                      </span>
+                    </div>
+                    {claim.correction && (
+                      <div className="fact-correction">
+                        <strong>Correction:</strong>{' '}
+                        <MarkdownText text={claim.correction} inline />
+                      </div>
+                    )}
+                    {claim.grounded_evidence && (
+                      <div className="fact-evidence">
+                        <strong>Evidence:</strong>{' '}
+                        <MarkdownText text={claim.grounded_evidence} inline />
+                      </div>
+                    )}
+                    {claim.source_citation && (
+                      <div className="fact-source">
+                        <strong>Source / Benchmark:</strong> {claim.source_citation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-facts-notice">No specific factual claims extracted for verification.</div>
+          )}
         </div>
       )}
 
       {/* Pedagogical Actionable Improvements */}
-      {report.demand_evaluation?.improvements && report.demand_evaluation.improvements.length > 0 && (
-        <div>
-          <h3 className="section-title">🎯 Actionable Improvements & Snippets</h3>
-          <div className="improvements-list">
-            {report.demand_evaluation.improvements.map((imp, idx) => (
-              <div key={idx} className="improvement-card">
-                <div className="imp-header">
-                  <span className="imp-section">{imp.section}</span>
-                  <span className="imp-impact">⚠️ {imp.mark_impact}</span>
-                </div>
-                <div className="imp-issue">
-                  <MarkdownText text={imp.issue_detected} inline />
-                </div>
-                <div className="imp-prescription">
-                  <MarkdownText text={imp.prescription} />
-                </div>
-                {imp.plug_and_play_snippet && (
-                  <div className="imp-snippet">
-                    <MarkdownText text={imp.plug_and_play_snippet} />
+      {(() => {
+        const allImprovements = [
+          // ...(report.demand_evaluation?.improvements || []),
+          // ...(report.structure_evaluation?.improvements || []),
+        ];
+
+        if (allImprovements.length === 0) return null;
+
+        return (
+          <div>
+            <h3 className="section-title">🎯 Actionable Improvements & Snippets</h3>
+            <div className="improvements-list">
+              {allImprovements.map((imp, idx) => (
+                <div key={idx} className="improvement-card">
+                  <div className="imp-header">
+                    <span className="imp-section">{imp.section}</span>
+                    <span className="imp-impact">⚠️ {imp.mark_impact}</span>
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="imp-issue">
+                    <MarkdownText text={imp.issue_detected} inline />
+                  </div>
+                  <div className="imp-prescription">
+                    <MarkdownText text={imp.prescription} />
+                  </div>
+                  {imp.plug_and_play_snippet && (
+                    <div className="imp-snippet">
+                      <MarkdownText text={imp.plug_and_play_snippet} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {onReset && (
         <div className="results-footer">
