@@ -22,7 +22,17 @@ class BM25Store:
     """Manages disk persistence and searching for the BM25 keyword index."""
 
     def __init__(self, persist_path: Optional[Path] = None):
-        self.persist_path = Path(persist_path or (BM25_PERSIST_DIR / "modern_history.pkl"))
+        default_unified = BM25_PERSIST_DIR / "bm25_index.pkl"
+        legacy_path = BM25_PERSIST_DIR / "modern_history.pkl"
+        if persist_path:
+            self.persist_path = Path(persist_path)
+        elif default_unified.exists():
+            self.persist_path = default_unified
+        elif legacy_path.exists():
+            self.persist_path = legacy_path
+        else:
+            self.persist_path = default_unified
+
         self.corpus_ids: List[str] = []
         self.corpus_chunks: Dict[str, FactChunk] = {}
         self.bm25: Optional[BM25Okapi] = None
@@ -62,7 +72,12 @@ class BM25Store:
         except Exception:
             return False
 
-    def search(self, query: str, top_k: int = 10) -> List[Tuple[FactChunk, float]]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        where_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Tuple[FactChunk, float]]:
         """Run BM25 search returning list of (FactChunk, raw_score) pairs."""
         if not self.bm25 or not self.corpus_ids:
             return []
@@ -79,10 +94,25 @@ class BM25Store:
         scored_pairs.sort(key=lambda x: x[1], reverse=True)
 
         results: List[Tuple[FactChunk, float]] = []
-        for cid, score in scored_pairs[:top_k]:
+        for cid, score in scored_pairs:
             chunk = self.corpus_chunks.get(cid)
-            if chunk:
-                results.append((chunk, float(score)))
+            if not chunk:
+                continue
+
+            # Apply metadata filter if provided
+            if where_filter:
+                match = True
+                for k, v in where_filter.items():
+                    val = getattr(chunk.metadata, k, None)
+                    if val != v:
+                        match = False
+                        break
+                if not match:
+                    continue
+
+            results.append((chunk, float(score)))
+            if len(results) >= top_k:
+                break
 
         return results
 
@@ -116,7 +146,7 @@ class HybridRetriever:
         Args:
             query: The user query, claim to verify, or student answer excerpt.
             top_k: Number of final fused passages to return.
-            where_filter: Optional metadata filter for dense vector search (e.g. {"subject": "Modern History"}).
+            where_filter: Optional metadata filter for vector and BM25 search (e.g. {"paper": "GS-1"}).
             
         Returns:
             List of RetrievalResult objects sorted by highest RRF score.
@@ -137,7 +167,12 @@ class HybridRetriever:
             print(f"[Warning] Dense search skipped or failed: {e}")
 
         # 2. Sparse BM25 Keyword Search
-        bm25_scored = self.bm25_store.search(query, top_k=candidate_pool)
+        bm25_scored = self.bm25_store.search(
+            query,
+            top_k=candidate_pool,
+            where_filter=where_filter,
+        )
+
 
         # 3. Reciprocal Rank Fusion (RRF)
         # RRF_score(d) = sum(1 / (k + rank))

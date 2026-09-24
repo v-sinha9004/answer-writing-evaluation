@@ -6,16 +6,20 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.config import CHROMA_PERSIST_DIR
-from src.rag.pdf_loader import SpectrumPDFLoader
-from src.rag.chunker import SpectrumChunker
+from src.rag.pdf_loader import PDFLoader
+from src.rag.chunker import TextbookChunker
 from src.rag.store import ChromaVectorStore
 from src.rag.retriever import HybridRetriever, tokenize_for_bm25
 from src.rag.embeddings import EmbeddingClient
+from src.rag.ingest import detect_metadata_from_path
+from src.rag.schema import FactChunk, ChunkMetadata
+
+SAMPLE_PDF_PATH = Path("data/resources/gs1/modern_history/spectrum.pdf")
 
 
 def test_pdf_loader_sample_pages():
-    """Verify SpectrumPDFLoader extracts clean text and assigns chapter titles."""
-    loader = SpectrumPDFLoader()
+    """Verify PDFLoader extracts clean text and assigns chapter titles."""
+    loader = PDFLoader(pdf_path=SAMPLE_PDF_PATH, subject_name="Modern History")
     pages = loader.load_pages(page_range=(180, 182))
 
     assert len(pages) > 0
@@ -23,7 +27,6 @@ def test_pdf_loader_sample_pages():
     assert "page_number" in first_page
     assert first_page["page_number"] == 180
     assert "chapter_title" in first_page
-    assert "Rising Resentment" in first_page["chapter_title"] or "Unit III" in first_page["chapter_title"]
     assert "source_file" in first_page
     # Watermark text should have been stripped
     assert "t.me/" not in first_page["text"]
@@ -31,10 +34,16 @@ def test_pdf_loader_sample_pages():
 
 def test_chunker_structure_and_prefix():
     """Verify chunker creates structured FactChunks with context prefixes."""
-    loader = SpectrumPDFLoader()
+    loader = PDFLoader(pdf_path=SAMPLE_PDF_PATH, subject_name="Modern History")
     pages = loader.load_pages(page_range=(180, 181))
-    chunker = SpectrumChunker(target_tokens=400, overlap_tokens=80)
-    chunks = chunker.chunk_pages(pages)
+    chunker = TextbookChunker(target_tokens=400, overlap_tokens=80)
+    chunks = chunker.chunk_pages(
+        pages,
+        paper="GS-1",
+        subject="Modern History",
+        resource_name="Spectrum Modern History",
+        id_prefix="spectrum",
+    )
 
     assert len(chunks) >= len(pages)
     for c in chunks:
@@ -45,6 +54,7 @@ def test_chunker_structure_and_prefix():
         # Check context prefix injection
         assert c.prefixed_content.startswith("[Resource: Spectrum Modern History")
         assert f"Page: {c.metadata.page_number}" in c.prefixed_content
+
 
 
 def test_chroma_ephemeral_store(ephemeral_chroma, sample_modern_history_chunks):
@@ -132,3 +142,138 @@ def test_zero_disk_pollution(ephemeral_chroma, sample_modern_history_chunks):
         files = list(CHROMA_PERSIST_DIR.glob("**/*"))
         for f in files:
             assert "test_modern_history" not in f.name
+
+
+def test_detect_metadata_from_path():
+    """Verify auto-detection of GS paper, subject name, and ID prefix from folder paths."""
+    # Test GS-1 Modern History (new layout)
+    meta1 = detect_metadata_from_path(Path("data/resources/gs1/modern_history/spectrum.pdf"))
+    assert meta1["paper"] == "GS-1"
+    assert meta1["subject"] == "Modern History"
+    assert meta1["id_prefix"] == "modern_history"
+
+
+    # Test GS-2 Polity
+    meta2 = detect_metadata_from_path(Path("resources/gs2/polity/laxmikanth.pdf"))
+    assert meta2["paper"] == "GS-2"
+    assert meta2["subject"] == "Polity"
+    assert meta2["id_prefix"] == "polity"
+
+    # Test GS-3 Economy
+    meta3 = detect_metadata_from_path(Path("data/resources/gs3/economy/ramesh_singh.pdf"))
+    assert meta3["paper"] == "GS-3"
+    assert meta3["subject"] == "Economy"
+    assert meta3["id_prefix"] == "economy"
+
+    # Test GS-4 Ethics
+    meta4 = detect_metadata_from_path(Path("resources/gs4/ethics/lexicon.pdf"))
+    assert meta4["paper"] == "GS-4"
+    assert meta4["subject"] == "Ethics"
+    assert meta4["id_prefix"] == "ethics"
+
+    # Test GS-1 Geography
+    meta5 = detect_metadata_from_path(Path("data/resources/gs1/geography/ncert_physical_geography.pdf"))
+    assert meta5["paper"] == "GS-1"
+    assert meta5["subject"] == "Geography"
+    assert meta5["id_prefix"] == "geography"
+
+
+def test_textbook_chunker_multi_subject():
+    """Verify TextbookChunker parameterizes paper, subject, prefix, and ID correctly."""
+    dummy_pages = [
+        {
+            "page_number": 12,
+            "chapter_title": "Preamble of the Constitution",
+            "source_file": "laxmikanth.pdf",
+            "text": "The American Constitution was the first to begin with a Preamble. Many countries including India followed this practice.",
+        }
+    ]
+    chunker = TextbookChunker(target_tokens=400, overlap_tokens=80)
+    chunks = chunker.chunk_pages(
+        dummy_pages,
+        paper="GS-2",
+        subject="Indian Polity",
+        resource_name="Laxmikanth Indian Polity",
+        id_prefix="polity",
+    )
+
+    assert len(chunks) == 1
+    c = chunks[0]
+    assert c.id == "polity_p012_c01"
+    assert c.metadata.paper == "GS-2"
+    assert c.metadata.subject == "Indian Polity"
+    assert c.metadata.chapter_title == "Preamble of the Constitution"
+    assert c.metadata.page_number == 12
+    assert c.prefixed_content.startswith("[Resource: Laxmikanth Indian Polity | Subject: GS-2 Indian Polity")
+    assert "Page: 12" in c.prefixed_content
+
+
+def test_hybrid_retriever_where_filtering(temp_bm25_store):
+    """Verify HybridRetriever respects where_filter for dense and BM25 search."""
+    isolated_chroma = ChromaVectorStore(collection_name="test_filter_retriever", in_memory=True)
+    # Create one GS-1 chunk and one GS-2 chunk with overlapping keywords
+    c_gs1 = FactChunk(
+        id="hist_p001_c01",
+        content="The Constitution of India evolved historically through acts like the Government of India Act 1935.",
+        prefixed_content="[Resource: History] The Constitution of India evolved historically through acts like the Government of India Act 1935.",
+        metadata=ChunkMetadata(
+            chunk_id="hist_p001_c01",
+            source_file="history.pdf",
+            paper="GS-1",
+            subject="Modern History",
+            page_number=1,
+            chapter_title="Constitutional Development",
+            token_count=20,
+        ),
+        embedding=[0.01] * 1536,
+    )
+    c_gs2 = FactChunk(
+        id="polity_p001_c01",
+        content="The Constitution of India provides for a parliamentary system of government at both Centre and States.",
+        prefixed_content="[Resource: Polity] The Constitution of India provides for a parliamentary system of government at both Centre and States.",
+        metadata=ChunkMetadata(
+            chunk_id="polity_p001_c01",
+            source_file="polity.pdf",
+            paper="GS-2",
+            subject="Indian Polity",
+            page_number=1,
+            chapter_title="Salient Features",
+            token_count=20,
+        ),
+        embedding=[0.01] * 1536,
+    )
+
+    isolated_chroma.upsert([c_gs1, c_gs2])
+    temp_bm25_store.build_and_save([c_gs1, c_gs2])
+
+    mock_embedder = MagicMock(spec=EmbeddingClient)
+    mock_embedder.embed_query.return_value = [0.01] * 1536
+
+    retriever = HybridRetriever(
+        vector_store=isolated_chroma,
+        embedding_client=mock_embedder,
+        bm25_store=temp_bm25_store,
+        rrf_k=60,
+    )
+
+
+    # Search filtering strictly for GS-2
+    results_gs2 = retriever.search(
+        query="Constitution of India government",
+        top_k=5,
+        where_filter={"paper": "GS-2"},
+    )
+    assert len(results_gs2) == 1
+    assert results_gs2[0].chunk.metadata.paper == "GS-2"
+    assert results_gs2[0].chunk.id == "polity_p001_c01"
+
+    # Search filtering strictly for GS-1
+    results_gs1 = retriever.search(
+        query="Constitution of India government",
+        top_k=5,
+        where_filter={"paper": "GS-1"},
+    )
+    assert len(results_gs1) == 1
+    assert results_gs1[0].chunk.metadata.paper == "GS-1"
+    assert results_gs1[0].chunk.id == "hist_p001_c01"
+

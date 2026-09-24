@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field
 class ChunkMetadata(BaseModel):
     """Metadata attached to each chunk in the vector store."""
     chunk_id: str = Field(..., description="Unique deterministic chunk identifier")
-    source_file: str = Field(..., description="Name of source document, e.g. gs1_modern_history_spectrum.pdf")
-    paper: str = Field(default="GS-1", description="UPSC General Studies paper (GS-1, GS-2, etc.)")
-    subject: str = Field(default="Modern History", description="Subject area")
+    source_file: str = Field(..., description="Name of source document, e.g. spectrum.pdf")
+    paper: str = Field(..., description="UPSC General Studies paper (GS-1, GS-2, etc.)")
+    subject: str = Field(..., description="Subject area (e.g. Modern History, Polity)")
     page_number: int = Field(..., description="Exact page number in the source resource")
     chapter_title: str = Field(default="General", description="Chapter or section heading")
     token_count: int = Field(default=0, description="Approximate or exact token count")
@@ -37,13 +37,14 @@ class ChunkMetadata(BaseModel):
         return cls(
             chunk_id=str(data.get("chunk_id", "")),
             source_file=str(data.get("source_file", "")),
-            paper=str(data.get("paper", "GS-1")),
-            subject=str(data.get("subject", "Modern History")),
+            paper=str(data.get("paper", "")),
+            subject=str(data.get("subject", "")),
             page_number=int(data.get("page_number", 0)),
             chapter_title=str(data.get("chapter_title", "General")),
             token_count=int(data.get("token_count", 0)),
             created_at=str(data.get("created_at", "")),
         )
+
 
 
 class FactChunk(BaseModel):

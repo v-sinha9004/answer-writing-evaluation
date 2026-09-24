@@ -68,18 +68,27 @@ DATA_DIR = ROOT_DIR / "data"
 DATABASE_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "evaluations.db")))
 CHROMA_PERSIST_DIR = Path(os.getenv("CHROMA_PERSIST_DIR", str(DATA_DIR / "chromadb")))
 BM25_PERSIST_DIR = Path(os.getenv("BM25_PERSIST_DIR", str(DATA_DIR / "bm25")))
-RESOURCES_DIR = DATA_DIR / "resources" / "gs1_modern_history"
+RESOURCES_DIR = DATA_DIR / "resources"
+ROOT_RESOURCES_DIR = ROOT_DIR / "resources"
 
-# Spectrum PDF Source (checks resources dir first, then repo root)
-_local_resource_pdf = RESOURCES_DIR / "gs1_modern_history_spectrum.pdf"
-_root_resource_pdf = ROOT_DIR / "gs1_modern_history_spectrum.pdf"
-SPECTRUM_PDF_PATH = _local_resource_pdf if _local_resource_pdf.exists() else _root_resource_pdf
+
 
 # Collection & Chunking Defaults
-DEFAULT_COLLECTION_NAME = "gs1_modern_history"
+DEFAULT_COLLECTION_NAME = os.getenv("DEFAULT_COLLECTION_NAME", "upsc_knowledge_base")
 CHUNK_SIZE_TOKENS = 600
 CHUNK_OVERLAP_TOKENS = 120
 BATCH_SIZE = 100
+
+def get_resource_search_paths() -> list[Path]:
+    """Return all directories to search for syllabus resource PDFs."""
+    paths = []
+    if RESOURCES_DIR.exists():
+        paths.append(RESOURCES_DIR)
+    if ROOT_RESOURCES_DIR.exists():
+        paths.append(ROOT_RESOURCES_DIR)
+    if not paths:
+        paths.append(RESOURCES_DIR)
+    return paths
 
 def ensure_directories():
     """Ensure persistent storage directories exist."""
@@ -88,3 +97,4 @@ def ensure_directories():
     CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
     BM25_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
     RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
+

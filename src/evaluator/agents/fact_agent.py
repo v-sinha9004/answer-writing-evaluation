@@ -31,23 +31,24 @@ class FactAgent(BaseAgent):
             return None
 
     @observe_stage(name="rag_hybrid_retrieval", as_type="retriever")
-    def _retrieve_grounded_context(self, claims: List[str]) -> str:
+    def _retrieve_grounded_context(self, claims: List[str], paper: Optional[str] = None) -> str:
         """Retrieve authentic passages from Hybrid RAG for extracted candidate claims."""
         retriever = self._get_retriever()
         grounded_contexts: List[str] = []
 
         if retriever and claims:
             seen_chunk_ids = set()
+            where_filter = {"paper": paper} if paper else None
             for claim in claims[:5]:
                 try:
-                    search_results = retriever.search(query=claim, top_k=2)
+                    search_results = retriever.search(query=claim, top_k=2, where_filter=where_filter)
                     for res in search_results:
                         cid = res.chunk.id
                         if cid not in seen_chunk_ids:
                             seen_chunk_ids.add(cid)
                             meta = res.chunk.metadata
                             grounded_contexts.append(
-                                f"--- [Source: {meta.source_file} | Chapter: {meta.chapter_title} | Page: {meta.page_number}] ---\n"
+                                f"--- [Source: {meta.source_file} | Paper: {meta.paper} | Subject: {meta.subject} | Chapter: {meta.chapter_title} | Page: {meta.page_number}] ---\n"
                                 f"{res.chunk.content.strip()}"
                             )
                 except Exception:
@@ -56,12 +57,14 @@ class FactAgent(BaseAgent):
         return (
             "\n\n".join(grounded_contexts)
             if grounded_contexts
-            else "[Note: Local RAG passages unavailable or unindexed. Verify against standard GS-1 Modern History facts.]"
+            else f"[Note: Local RAG passages unavailable or unindexed for {paper or 'UPSC'}. Verify against standard syllabus facts.]"
         )
 
     @observe_stage(name="fact_agent", as_type="agent")
     async def evaluate(self, input_data: EvaluationInput) -> KnowledgeEvaluation:
         body_text = (input_data.full_markdown_text or "").strip()
+        paper = input_data.subject_paper
+
 
         if not body_text or len(body_text) < 10:
             return KnowledgeEvaluation(
@@ -104,7 +107,7 @@ Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
             claims = []
 
         # Step 2: Retrieve grounded context from Hybrid RAG for each claim
-        context_block = self._retrieve_grounded_context(claims)
+        context_block = self._retrieve_grounded_context(claims, paper=paper)
 
         # Step 3: Verify claims against reference passages
         verification_user_prompt = f"""VERIFY THE CANDIDATE'S FACTUAL CLAIMS AGAINST THE GROUNDED REFERENCE TEXT:
@@ -118,7 +121,7 @@ Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
 [CANDIDATE ANSWER]:
 \"\"\"{body_text}\"\"\"
 
-[AUTHENTIC REFERENCE PASSAGES (SPECTRUM MODERN HISTORY)]:
+[AUTHENTIC REFERENCE PASSAGES ({paper.upper()} REFERENCE)]:
 \"\"\"
 {context_block}
 \"\"\"

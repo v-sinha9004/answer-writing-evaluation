@@ -91,6 +91,18 @@ class ChromaVectorStore(BaseVectorStore):
             metadata={"hnsw:space": "cosine"}
         )
 
+        # Graceful fallback for backwards compatibility with legacy collection names
+        if not in_memory and self._collection.count() == 0 and collection_name == "upsc_knowledge_base":
+            try:
+                existing = [c.name for c in self._client.list_collections()]
+                if "gs1_modern_history" in existing:
+                    candidate = self._client.get_collection("gs1_modern_history")
+                    if candidate.count() > 0:
+                        self.collection_name = "gs1_modern_history"
+                        self._collection = candidate
+            except Exception:
+                pass
+
     def upsert(self, chunks: List[FactChunk]) -> int:
         if not chunks:
             return 0

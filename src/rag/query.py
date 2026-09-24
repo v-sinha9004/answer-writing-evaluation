@@ -91,9 +91,11 @@ def interactive_mode(retriever: HybridRetriever, default_top_k: int = 3):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Query the GS-1 Modern History RAG Knowledge Base.")
+    parser = argparse.ArgumentParser(description="Query the UPSC RAG Knowledge Base with optional paper/subject filters.")
     parser.add_argument("query", nargs="?", default=None, help="The query or claim text to search.")
     parser.add_argument("-k", "--top-k", type=int, default=3, help="Number of results to retrieve (default: 3).")
+    parser.add_argument("--paper", type=str, default=None, help="Filter by GS Paper (e.g. 'GS-1', 'GS-2').")
+    parser.add_argument("--subject", type=str, default=None, help="Filter by Subject (e.g. 'Modern History', 'Polity').")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive query prompt.")
 
     args = parser.parse_args()
@@ -104,11 +106,19 @@ def main():
         print(f"[Error initializing retriever]: {e}")
         sys.exit(1)
 
+    where_filter = {}
+    if args.paper:
+        where_filter["paper"] = args.paper
+    if args.subject:
+        where_filter["subject"] = args.subject
+    effective_filter = where_filter or None
+
     if args.interactive or not args.query:
         interactive_mode(retriever, default_top_k=args.top_k)
     else:
-        results = retriever.search(query=args.query, top_k=args.top_k)
+        results = retriever.search(query=args.query, top_k=args.top_k, where_filter=effective_filter)
         display_results(args.query, results)
+
 
 
 if __name__ == "__main__":

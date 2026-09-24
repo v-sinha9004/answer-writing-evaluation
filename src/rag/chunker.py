@@ -1,14 +1,20 @@
-"""Recursive structural chunker with Context Prefix Injection for UPSC Modern History."""
+"""Recursive structural chunker with Context Prefix Injection for UPSC textbooks."""
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import tiktoken
 from src.config import CHUNK_SIZE_TOKENS, CHUNK_OVERLAP_TOKENS
 from src.rag.schema import FactChunk, ChunkMetadata
 
 
-class SpectrumChunker:
-    """Chunks Spectrum PDF pages with sliding overlap and context prefix injection."""
+def slugify_id(text: str) -> str:
+    """Convert a subject or resource name into a clean alphanumeric identifier prefix."""
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", text.lower()).strip("_")
+    return slug[:20] if slug else "chunk"
+
+
+class TextbookChunker:
+    """Chunks any UPSC textbook PDF pages with sliding overlap and context prefix injection."""
 
     def __init__(
         self,
@@ -24,16 +30,30 @@ class SpectrumChunker:
         """Count tokens in text."""
         return len(self.tokenizer.encode(text, disallowed_special=()))
 
-    def chunk_pages(self, pages: List[Dict[str, Any]]) -> List[FactChunk]:
+    def chunk_pages(
+        self,
+        pages: List[Dict[str, Any]],
+        paper: str,
+        subject: str,
+        resource_name: Optional[str] = None,
+        id_prefix: Optional[str] = None,
+    ) -> List[FactChunk]:
+
         """Split a list of extracted PDF pages into structured FactChunks.
         
         Args:
-            pages: List of page dicts from SpectrumPDFLoader.
+            pages: List of page dicts from PDF loader.
+            paper: UPSC General Studies paper designation (GS-1, GS-2, etc.).
+            subject: Specific subject area (e.g. Modern History, Polity, Geography).
+            resource_name: Optional display name of the resource for context injection.
+            id_prefix: Optional prefix for deterministic chunk IDs (e.g. 'polity', 'spectrum').
             
         Returns:
             List of FactChunk instances with rich metadata and prefixed content.
         """
         all_chunks: List[FactChunk] = []
+        effective_resource = resource_name or f"UPSC {paper} {subject}"
+        effective_prefix = id_prefix or slugify_id(subject)
 
         for page in pages:
             page_num = page["page_number"]
@@ -46,6 +66,10 @@ class SpectrumChunker:
                 page_num=page_num,
                 chapter_title=chapter_title,
                 source_file=source_file,
+                paper=paper,
+                subject=subject,
+                resource_name=effective_resource,
+                id_prefix=effective_prefix,
             )
             all_chunks.extend(page_chunks)
 
@@ -57,6 +81,10 @@ class SpectrumChunker:
         page_num: int,
         chapter_title: str,
         source_file: str,
+        paper: str,
+        subject: str,
+        resource_name: str,
+        id_prefix: str,
     ) -> List[FactChunk]:
         """Split a single page's text into one or more chunks."""
         # Split text into paragraphs
@@ -127,12 +155,12 @@ class SpectrumChunker:
         # Convert chunk texts to FactChunk models with Context Prefix
         fact_chunks: List[FactChunk] = []
         for idx, text in enumerate(chunks_text, start=1):
-            chunk_id = f"spectrum_p{page_num:03d}_c{idx:02d}"
+            chunk_id = f"{id_prefix}_p{page_num:03d}_c{idx:02d}"
             token_count = self.count_tokens(text)
 
             # Injected context prefix
             prefix = (
-                f"[Resource: Spectrum Modern History | Subject: GS-1 Modern History | "
+                f"[Resource: {resource_name} | Subject: {paper} {subject} | "
                 f"Chapter: {chapter_title} | Page: {page_num}]\n\n"
             )
             prefixed_content = prefix + text
@@ -140,8 +168,8 @@ class SpectrumChunker:
             meta = ChunkMetadata(
                 chunk_id=chunk_id,
                 source_file=source_file,
-                paper="GS-1",
-                subject="Modern History",
+                paper=paper,
+                subject=subject,
                 page_number=page_num,
                 chapter_title=chapter_title,
                 token_count=token_count,
@@ -155,3 +183,9 @@ class SpectrumChunker:
             ))
 
         return fact_chunks
+
+
+# Aliases for convenience
+SpectrumChunker = TextbookChunker
+
+

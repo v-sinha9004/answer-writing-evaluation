@@ -121,7 +121,7 @@ Example claims:
 
 FACT_VERIFICATION_PROMPT = """You are a meticulous UPSC History & Fact Verification Examiner.
 
-Verify the candidate's claims against the provided reference knowledge passages retrieved from authentic textbooks (Spectrum Modern History).
+Verify the candidate's claims against the provided reference knowledge passages retrieved from authentic UPSC syllabus textbooks.
 
 ### VERIFICATION CRITERIA:
 1. VERIFIED: Claim is historically accurate and consistent with the reference passages.
