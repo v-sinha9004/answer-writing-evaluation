@@ -143,14 +143,16 @@ Your role is to synthesize the specialist evaluations (Demand, Intro, Structure,
    - Introduction: 10%
    - Structure & Flow: 10%
    - Conclusion & Way Forward: 15%
-   - Standard scale: 40-50% = Average (4.0-5.5/10, 6.0-7.5/15), 55-65% = Good, 70%+ = Exceptional Topper.
-   - Do NOT inflate scores. Align with real-world UPSC benchmarks.
+   - Realistic UPSC Score Ceilings (Do NOT inflate scores; align with real-world UPSC benchmarks):
+     * 10-mark questions: Maximum awardable ceiling is 5.5 marks. (Average: 2.2-3.3, Good: 3.3-4.4, Topper: 4.5-5.5)
+     * 15-mark questions: Maximum awardable ceiling is 8.5 marks. (Average: 3.4-5.1, Good: 5.1-6.8, Topper: 6.8-8.5)
+     * Never award marks exceeding these realistic UPSC ceilings.
 
 2. DEDUPLICATION:
    - Specialists may highlight overlapping gaps. Collapse redundant critiques into unified, high-impact action items.
 
 3. GOOD ANSWER TRANSFORMATION STEPS (good_answer_steps):
-   - Provide 3-4 concrete, prioritized, actionable steps required to elevate this answer to a solid UPSC standard (55%+ marks).
+   - Provide 3-4 concrete, prioritized, actionable steps required to elevate this answer to a solid UPSC standard (top benchmark tier).
    - Must cover the essential dimensions where the candidate lost marks:
      * Demand & Directive Coverage: Explicitly addressing all sub-demands and question directives with balanced weightage.
      * Factual & Conceptual Corrections: Rectifying factual errors from the knowledge audit and grounding the answer with syllabus core facts.

@@ -124,11 +124,11 @@ def test_scoring_calibration_math_deterministic():
 
     # Weights: Demand 30%, Fact 35%, Intro 10%, Struct 10%, Concl 15%
     # Expected: (0.30*6.0 + 0.35*5.0 + 0.10*6.0 + 0.10*7.0 + 0.15*5.0) = 1.8 + 1.75 + 0.6 + 0.7 + 0.75 = 5.60 / 10
-    # Scaled to 15 marks: (5.60 / 10) * 15 = 8.40 / 15
+    # Scaled to 15 marks with realistic UPSC max ceiling of 8.5: (5.60 / 10) * 8.5 = 4.76 / 15
     assert scorecard.max_marks == 15
-    assert scorecard.total_score == 8.4
-    assert scorecard.percentage == 56.0
-    assert "Good / Competitive Mains Standard" in scorecard.benchmark_verdict
+    assert scorecard.total_score == 4.76
+    assert scorecard.percentage == 31.7
+    assert "Average / Baseline Attempt" in scorecard.benchmark_verdict
     assert len(scorecard.dimensions) == 5
 
 
@@ -153,10 +153,119 @@ def test_dynamic_reweighting_on_agent_failure():
     )
 
     # Since Intro failed, its 10% weight is dropped and remaining 90% is normalized to 1.0
-    # Since all active scores are 6.0/10, weighted average remains 6.0/10 -> 9.0/15 marks
-    assert scorecard.total_score == 9.0
+    # Since all active scores are 6.0/10, weighted average remains 6.0/10 -> (6.0 / 10) * 8.5 = 5.10 / 15 marks
+    assert scorecard.total_score == 5.1
     # Intro dimension should be recorded
     assert "Introduction" in scorecard.dimensions
+
+
+def test_upsc_scoring_ceilings_10_and_15_marks():
+    """Verify that 10-mark questions cap at 5.5 and 15-mark questions cap at 8.5 for flawless answers."""
+    arbiter = MasterScoringAgent()
+
+    # Flawless specialist evaluations (all 10.0 / 10)
+    demand_eval = DemandEvaluation(directive_adherence_score=10.0)
+    fact_eval = KnowledgeEvaluation(factual_accuracy_score=10.0)
+    intro_eval = IntroEvaluation(intro_present=True, intro_score=10.0)
+    structure_eval = StructureEvaluation(structural_score=10.0)
+    conclusion_eval = ConclusionEvaluation(conclusion_present=True, conclusion_score=10.0)
+
+    # Test 10 Marks
+    input_10 = EvaluationInput(
+        question_text="Sample 10M Question",
+        question_marks=10,
+        full_markdown_text="A very well-written UPSC answer.",
+        estimated_word_count=150,
+    )
+    scorecard_10 = arbiter.calculate_scorecard(
+        input_data=input_10,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+    assert scorecard_10.max_marks == 10
+    assert scorecard_10.total_score == 5.5
+    assert scorecard_10.percentage == 55.0
+    assert "Topper Quality / Exceptional Answer" in scorecard_10.benchmark_verdict
+
+    # Verify dimension effective marks for 10M sum to 5.5
+    dim_sum_10 = round(sum(d.effective_marks for d in scorecard_10.dimensions.values()), 2)
+    assert abs(dim_sum_10 - 5.5) <= 0.02
+
+    # Test 15 Marks
+    input_15 = EvaluationInput(
+        question_text="Sample 15M Question",
+        question_marks=15,
+        full_markdown_text="A very well-written UPSC answer for 15 marks.",
+        estimated_word_count=250,
+    )
+    scorecard_15 = arbiter.calculate_scorecard(
+        input_data=input_15,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+    assert scorecard_15.max_marks == 15
+    assert scorecard_15.total_score == 8.5
+    assert scorecard_15.percentage == 56.7
+    assert "Topper Quality / Exceptional Answer" in scorecard_15.benchmark_verdict
+
+    # Verify dimension effective marks for 15M sum to 8.5
+    dim_sum_15 = round(sum(d.effective_marks for d in scorecard_15.dimensions.values()), 2)
+    assert abs(dim_sum_15 - 8.5) <= 0.02
+
+
+def test_upsc_underlength_penalty_scaling():
+    """Verify that severely under-length answers receive scaled penalties (0.5 for 10M, 0.8 for 15M)."""
+    arbiter = MasterScoringAgent()
+
+    demand_eval = DemandEvaluation(directive_adherence_score=6.0)
+    fact_eval = KnowledgeEvaluation(factual_accuracy_score=6.0)
+    intro_eval = IntroEvaluation(intro_present=True, intro_score=6.0)
+    structure_eval = StructureEvaluation(structural_score=6.0)
+    conclusion_eval = ConclusionEvaluation(conclusion_present=True, conclusion_score=6.0)
+
+    # 10M question: expected 150 words, candidate wrote only 40 words (< 45% of 150 = 67.5 words)
+    input_10_short = EvaluationInput(
+        question_text="Sample 10M Question",
+        question_marks=10,
+        full_markdown_text="Short answer",
+        estimated_word_count=40,
+    )
+    scorecard_10 = arbiter.calculate_scorecard(
+        input_data=input_10_short,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+    # Base: 0.6 * 5.5 = 3.30. Penalty: -0.50 -> 2.80
+    assert scorecard_10.total_score == 2.80
+    assert any("-0.5 mark deduction" in p for p in scorecard_10.penalties_applied)
+
+    # 15M question: expected 250 words, candidate wrote only 60 words (< 45% of 250 = 112.5 words)
+    input_15_short = EvaluationInput(
+        question_text="Sample 15M Question",
+        question_marks=15,
+        full_markdown_text="Short answer",
+        estimated_word_count=60,
+    )
+    scorecard_15 = arbiter.calculate_scorecard(
+        input_data=input_15_short,
+        demand_eval=demand_eval,
+        intro_eval=intro_eval,
+        structure_eval=structure_eval,
+        conclusion_eval=conclusion_eval,
+        fact_eval=fact_eval,
+    )
+    # Base: 0.6 * 8.5 = 5.10. Penalty: -0.80 -> 4.30
+    assert scorecard_15.total_score == 4.30
+    assert any("-0.8 mark deduction" in p for p in scorecard_15.penalties_applied)
 
 
 def test_intro_and_conclusion_missing_handling():
