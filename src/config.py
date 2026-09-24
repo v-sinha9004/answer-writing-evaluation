@@ -65,6 +65,7 @@ EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
 # Storage & Paths
 DATA_DIR = ROOT_DIR / "data"
+DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "supabase").strip().lower()
 DATABASE_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "evaluations.db")))
 CHROMA_PERSIST_DIR = Path(os.getenv("CHROMA_PERSIST_DIR", str(DATA_DIR / "chromadb")))
 BM25_PERSIST_DIR = Path(os.getenv("BM25_PERSIST_DIR", str(DATA_DIR / "bm25")))

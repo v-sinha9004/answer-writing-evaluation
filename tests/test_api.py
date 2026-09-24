@@ -21,6 +21,8 @@ from src.evaluator.schemas import (
 def isolate_test_db(tmp_path, monkeypatch):
     """Ensure all API tests run against an isolated temporary database."""
     test_db = tmp_path / "test_api_evaluations.db"
+    monkeypatch.setenv("DATABASE_BACKEND", "sqlite")
+    monkeypatch.setattr("src.config.DATABASE_BACKEND", "sqlite")
     monkeypatch.setattr("src.config.DATABASE_PATH", test_db)
     monkeypatch.setattr("src.db.repository.DATABASE_PATH", test_db)
     from src.db.repository import init_db

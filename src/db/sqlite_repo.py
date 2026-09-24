@@ -1,0 +1,258 @@
+"""SQLite repository for persistent storage of UPSC evaluations."""
+
+import json
+import sqlite3
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Union, Dict, Any, List
+
+from src.config import DATABASE_PATH
+from src.evaluator.schemas import ComprehensiveEvaluationReport, EvaluationInput
+from src.db.base import BaseEvaluationRepository
+
+
+class SqliteEvaluationRepository(BaseEvaluationRepository):
+    """SQLite implementation of evaluation storage."""
+
+    def __init__(self, db_path: Optional[Path] = None):
+        self.default_db_path = Path(db_path) if db_path else DATABASE_PATH
+
+    def get_connection(self, db_path: Optional[Path] = None) -> sqlite3.Connection:
+        """Get an SQLite connection with Row factory and WAL mode enabled."""
+        target_path = Path(db_path) if db_path else self.default_db_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(target_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        return conn
+
+    def init_db(self, db_path: Optional[Path] = None, **kwargs) -> None:
+        """Initialize database tables and indexes."""
+        with self.get_connection(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evaluations (
+                    id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    paper TEXT NOT NULL,
+                    marks INTEGER NOT NULL,
+                    question_text TEXT,
+                    filename TEXT,
+                    word_count INTEGER DEFAULT 0,
+                    legibility_status TEXT DEFAULT 'AVERAGE',
+                    total_score REAL NOT NULL,
+                    max_marks INTEGER NOT NULL,
+                    percentage REAL NOT NULL,
+                    benchmark_verdict TEXT NOT NULL,
+                    full_answer_text TEXT,
+                    report_json TEXT NOT NULL,
+                    ocr_json TEXT,
+                    pdf_url TEXT,
+                    total_latency_seconds REAL DEFAULT 0.0
+                );
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON evaluations(created_at DESC);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_evaluations_paper ON evaluations(paper);"
+            )
+            try:
+                conn.execute("ALTER TABLE evaluations ADD COLUMN ocr_json TEXT;")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE evaluations ADD COLUMN pdf_url TEXT;")
+            except sqlite3.OperationalError:
+                pass
+            conn.commit()
+
+    def save_evaluation(
+        self,
+        input_data: Union[EvaluationInput, Dict[str, Any]],
+        report: ComprehensiveEvaluationReport,
+        filename: Optional[str] = None,
+        ocr_json: Optional[Union[str, Dict[str, Any]]] = None,
+        pdf_url: Optional[str] = None,
+        eval_id: Optional[str] = None,
+        db_path: Optional[Path] = None,
+        **kwargs,
+    ) -> str:
+        """Save an evaluation report and candidate answer input into SQLite."""
+        self.init_db(db_path)
+
+        if isinstance(input_data, dict):
+            input_data = EvaluationInput.model_validate(input_data)
+
+        final_id = eval_id or f"eval_{uuid.uuid4().hex[:12]}"
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        final_pdf_url = (
+            pdf_url
+            or getattr(input_data, "pdf_url", None)
+            or getattr(report, "pdf_url", None)
+        )
+
+        report.id = final_id
+        report.created_at = now_iso
+        report.paper = input_data.subject_paper
+        report.question_text = input_data.question_text
+        report.filename = filename
+        report.pdf_url = final_pdf_url
+
+        scorecard = report.scorecard
+        report_json_str = report.model_dump_json()
+
+        final_ocr_json = ocr_json or getattr(input_data, "ocr_json", None)
+        if isinstance(final_ocr_json, dict):
+            final_ocr_json = json.dumps(final_ocr_json, ensure_ascii=False)
+
+        with self.get_connection(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO evaluations (
+                    id, created_at, paper, marks, question_text, filename,
+                    word_count, legibility_status, total_score, max_marks,
+                    percentage, benchmark_verdict,
+                    full_answer_text, report_json, ocr_json, pdf_url, total_latency_seconds
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    final_id,
+                    now_iso,
+                    input_data.subject_paper,
+                    input_data.question_marks,
+                    input_data.question_text,
+                    filename or "submission.pdf",
+                    input_data.estimated_word_count,
+                    input_data.legibility_status or "AVERAGE",
+                    scorecard.total_score,
+                    scorecard.max_marks,
+                    scorecard.percentage,
+                    scorecard.benchmark_verdict,
+                    input_data.full_markdown_text,
+                    report_json_str,
+                    final_ocr_json,
+                    final_pdf_url,
+                    report.total_latency_seconds,
+                ),
+            )
+            conn.commit()
+
+        return final_id
+
+    def get_evaluation(
+        self,
+        evaluation_id: str,
+        db_path: Optional[Path] = None,
+        **kwargs,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve full evaluation details and deserialized report by ID."""
+        self.init_db(db_path)
+
+        with self.get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM evaluations WHERE id = ?", (evaluation_id,)
+            ).fetchone()
+
+            if not row:
+                return None
+
+            report_dict = json.loads(row["report_json"])
+            if "pdf_url" in row.keys() and row["pdf_url"]:
+                report_dict["pdf_url"] = row["pdf_url"]
+            report_dict["id"] = row["id"]
+
+            ocr_data = None
+            if "ocr_json" in row.keys() and row["ocr_json"]:
+                try:
+                    ocr_data = json.loads(row["ocr_json"])
+                except Exception:
+                    ocr_data = row["ocr_json"]
+
+            return {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "paper": row["paper"],
+                "marks": row["marks"],
+                "question_text": row["question_text"],
+                "filename": row["filename"],
+                "pdf_url": row["pdf_url"] if "pdf_url" in row.keys() else None,
+                "word_count": row["word_count"],
+                "legibility_status": row["legibility_status"],
+                "total_score": row["total_score"],
+                "max_marks": row["max_marks"],
+                "percentage": row["percentage"],
+                "benchmark_verdict": row["benchmark_verdict"],
+                "full_answer_text": row["full_answer_text"],
+                "ocr_json": ocr_data,
+                "total_latency_seconds": row["total_latency_seconds"],
+                "report": report_dict,
+            }
+
+    def list_evaluations(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        paper: Optional[str] = None,
+        db_path: Optional[Path] = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """List evaluations ordered by created_at DESC with summary cards."""
+        self.init_db(db_path)
+
+        query = (
+            "SELECT id, created_at, paper, marks, question_text, filename, "
+            "word_count, legibility_status, total_score, max_marks, percentage, "
+            "benchmark_verdict, pdf_url, total_latency_seconds FROM evaluations "
+        )
+        params: List[Any] = []
+
+        if paper:
+            query += "WHERE paper = ? "
+            params.append(paper)
+
+        query += "ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        with self.get_connection(db_path) as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+
+            return [
+                {
+                    "id": r["id"],
+                    "created_at": r["created_at"],
+                    "paper": r["paper"],
+                    "marks": r["marks"],
+                    "question_text": r["question_text"],
+                    "filename": r["filename"],
+                    "pdf_url": r["pdf_url"] if "pdf_url" in r.keys() else None,
+                    "word_count": r["word_count"],
+                    "legibility_status": r["legibility_status"],
+                    "total_score": r["total_score"],
+                    "max_marks": r["max_marks"],
+                    "percentage": r["percentage"],
+                    "benchmark_verdict": r["benchmark_verdict"],
+                    "total_latency_seconds": r["total_latency_seconds"],
+                }
+                for r in rows
+            ]
+
+    def delete_evaluation(
+        self,
+        evaluation_id: str,
+        db_path: Optional[Path] = None,
+        **kwargs,
+    ) -> bool:
+        """Delete an evaluation record by ID."""
+        self.init_db(db_path)
+
+        with self.get_connection(db_path) as conn:
+            cursor = conn.execute(
+                "DELETE FROM evaluations WHERE id = ?", (evaluation_id,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
