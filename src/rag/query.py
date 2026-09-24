@@ -21,7 +21,6 @@ def format_result(rank: int, result: RetrievalResult) -> str:
         f"│ [Rank {rank}] Combined RRF Score: {result.combined_score:<8} "
         f"(Dense: {dense_str} | BM25: {sparse_str})\n"
         f"│ 📖 Resource: {meta.source_file} | Page: {meta.page_number} | Tokens: {meta.token_count}\n"
-        f"│ 🔖 Chapter : {meta.chapter_title}\n"
         f"├{border}┤"
     )
 

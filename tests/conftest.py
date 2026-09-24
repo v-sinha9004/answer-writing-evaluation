@@ -20,7 +20,7 @@ def sample_modern_history_chunks():
                 "while Reserved subjects like law, justice, and police remained with the Governor and his executive council."
             ),
             prefixed_content=(
-                "[Resource: Spectrum Modern History | Chapter: Montagu-Chelmsford Reforms | Page: 184]\n\n"
+                "[Resource: Spectrum Modern History | Page: 184]\n\n"
                 "The Government of India Act 1919 introduced Dyarchy in the provinces. "
                 "Subjects were divided into 'Transferred' and 'Reserved' subjects."
             ),
@@ -30,7 +30,6 @@ def sample_modern_history_chunks():
                 paper="GS-1",
                 subject="Modern History",
                 page_number=184,
-                chapter_title="Montagu-Chelmsford Reforms",
                 token_count=75,
             ),
             # Realistic synthetic 1536-dim vector with a specific signature
@@ -44,7 +43,7 @@ def sample_modern_history_chunks():
                 "oppressive zamindari system, British colonial tax collectors, and money-lenders in the Damin-i-Koh region."
             ),
             prefixed_content=(
-                "[Resource: Spectrum Modern History | Chapter: Tribal Uprisings | Page: 201]\n\n"
+                "[Resource: Spectrum Modern History | Page: 201]\n\n"
                 "The Santhal Rebellion took place between 1855 and 1856 under Sidhu and Kanhu Murmu."
             ),
             metadata=ChunkMetadata(
@@ -53,7 +52,6 @@ def sample_modern_history_chunks():
                 paper="GS-1",
                 subject="Modern History",
                 page_number=201,
-                chapter_title="Tribal Uprisings",
                 token_count=70,
             ),
             embedding=[-0.05] * 1536,
@@ -66,7 +64,7 @@ def sample_modern_history_chunks():
                 "government schools, colleges, and law courts, and surrender of government titles."
             ),
             prefixed_content=(
-                "[Resource: Spectrum Modern History | Chapter: Non-Cooperation Movement | Page: 312]\n\n"
+                "[Resource: Spectrum Modern History | Page: 312]\n\n"
                 "The Non-Cooperation Movement was launched in 1920 by Mahatma Gandhi."
             ),
             metadata=ChunkMetadata(
@@ -75,7 +73,6 @@ def sample_modern_history_chunks():
                 paper="GS-1",
                 subject="Modern History",
                 page_number=312,
-                chapter_title="Non-Cooperation Movement",
                 token_count=65,
             ),
             embedding=[0.02] * 1536,

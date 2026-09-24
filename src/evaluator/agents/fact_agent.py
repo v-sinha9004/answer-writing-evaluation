@@ -48,7 +48,7 @@ class FactAgent(BaseAgent):
                             seen_chunk_ids.add(cid)
                             meta = res.chunk.metadata
                             grounded_contexts.append(
-                                f"--- [Source: {meta.source_file} | Paper: {meta.paper} | Subject: {meta.subject} | Chapter: {meta.chapter_title} | Page: {meta.page_number}] ---\n"
+                                f"--- [Source: {meta.source_file} | Paper: {meta.paper} | Subject: {meta.subject} | Page: {meta.page_number}] ---\n"
                                 f"{res.chunk.content.strip()}"
                             )
                 except Exception:

@@ -162,7 +162,7 @@ class FactualClaimCheck(BaseModel):
     verdict: Literal["VERIFIED", "INCORRECT", "UNVERIFIED"] = Field(description="RAG verification result")
     grounded_evidence: Optional[str] = Field(default=None, description="Supporting passage from the RAG store")
     correction: Optional[str] = Field(default=None, description="Factual correction if incorrect")
-    source_citation: Optional[str] = Field(default=None, description="Source book, chapter, or page number")
+    source_citation: Optional[str] = Field(default=None, description="Source book, subject, or page number")
 
 
 class KnowledgeEvaluation(BaseModel):

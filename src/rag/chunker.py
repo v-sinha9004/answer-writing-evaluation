@@ -57,14 +57,12 @@ class TextbookChunker:
 
         for page in pages:
             page_num = page["page_number"]
-            chapter_title = page["chapter_title"]
             source_file = page["source_file"]
             raw_text = page["text"]
 
             page_chunks = self._chunk_page_text(
                 raw_text=raw_text,
                 page_num=page_num,
-                chapter_title=chapter_title,
                 source_file=source_file,
                 paper=paper,
                 subject=subject,
@@ -79,7 +77,6 @@ class TextbookChunker:
         self,
         raw_text: str,
         page_num: int,
-        chapter_title: str,
         source_file: str,
         paper: str,
         subject: str,
@@ -161,7 +158,7 @@ class TextbookChunker:
             # Injected context prefix
             prefix = (
                 f"[Resource: {resource_name} | Subject: {paper} {subject} | "
-                f"Chapter: {chapter_title} | Page: {page_num}]\n\n"
+                f"Page: {page_num}]\n\n"
             )
             prefixed_content = prefix + text
 
@@ -171,7 +168,6 @@ class TextbookChunker:
                 paper=paper,
                 subject=subject,
                 page_number=page_num,
-                chapter_title=chapter_title,
                 token_count=token_count,
             )
 

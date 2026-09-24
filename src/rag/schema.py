@@ -12,7 +12,6 @@ class ChunkMetadata(BaseModel):
     paper: str = Field(..., description="UPSC General Studies paper (GS-1, GS-2, etc.)")
     subject: str = Field(..., description="Subject area (e.g. Modern History, Polity)")
     page_number: int = Field(..., description="Exact page number in the source resource")
-    chapter_title: str = Field(default="General", description="Chapter or section heading")
     token_count: int = Field(default=0, description="Approximate or exact token count")
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
@@ -27,7 +26,6 @@ class ChunkMetadata(BaseModel):
             "paper": self.paper,
             "subject": self.subject,
             "page_number": self.page_number,
-            "chapter_title": self.chapter_title,
             "token_count": self.token_count,
             "created_at": self.created_at,
         }
@@ -40,7 +38,6 @@ class ChunkMetadata(BaseModel):
             paper=str(data.get("paper", "")),
             subject=str(data.get("subject", "")),
             page_number=int(data.get("page_number", 0)),
-            chapter_title=str(data.get("chapter_title", "General")),
             token_count=int(data.get("token_count", 0)),
             created_at=str(data.get("created_at", "")),
         )

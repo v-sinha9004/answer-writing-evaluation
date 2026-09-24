@@ -18,7 +18,7 @@ SAMPLE_PDF_PATH = Path("data/resources/gs1/modern_history/spectrum.pdf")
 
 
 def test_pdf_loader_sample_pages():
-    """Verify PDFLoader extracts clean text and assigns chapter titles."""
+    """Verify PDFLoader extracts clean text and page numbers."""
     loader = PDFLoader(pdf_path=SAMPLE_PDF_PATH, subject_name="Modern History")
     pages = loader.load_pages(page_range=(180, 182))
 
@@ -26,7 +26,6 @@ def test_pdf_loader_sample_pages():
     first_page = pages[0]
     assert "page_number" in first_page
     assert first_page["page_number"] == 180
-    assert "chapter_title" in first_page
     assert "source_file" in first_page
     # Watermark text should have been stripped
     assert "t.me/" not in first_page["text"]
@@ -183,7 +182,6 @@ def test_textbook_chunker_multi_subject():
     dummy_pages = [
         {
             "page_number": 12,
-            "chapter_title": "Preamble of the Constitution",
             "source_file": "laxmikanth.pdf",
             "text": "The American Constitution was the first to begin with a Preamble. Many countries including India followed this practice.",
         }
@@ -202,7 +200,6 @@ def test_textbook_chunker_multi_subject():
     assert c.id == "polity_p012_c01"
     assert c.metadata.paper == "GS-2"
     assert c.metadata.subject == "Indian Polity"
-    assert c.metadata.chapter_title == "Preamble of the Constitution"
     assert c.metadata.page_number == 12
     assert c.prefixed_content.startswith("[Resource: Laxmikanth Indian Polity | Subject: GS-2 Indian Polity")
     assert "Page: 12" in c.prefixed_content
@@ -222,7 +219,6 @@ def test_hybrid_retriever_where_filtering(temp_bm25_store):
             paper="GS-1",
             subject="Modern History",
             page_number=1,
-            chapter_title="Constitutional Development",
             token_count=20,
         ),
         embedding=[0.01] * 1536,
@@ -237,7 +233,6 @@ def test_hybrid_retriever_where_filtering(temp_bm25_store):
             paper="GS-2",
             subject="Indian Polity",
             page_number=1,
-            chapter_title="Salient Features",
             token_count=20,
         ),
         embedding=[0.01] * 1536,
