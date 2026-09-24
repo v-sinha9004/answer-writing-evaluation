@@ -1,8 +1,8 @@
 # Autonomous UPSC Mains Answer Evaluation & Feedback Engine
 
-An autonomous, multi-agent evaluation engine designed to assess UPSC Mains handwritten and digital answer copies, verify facts against authoritative syllabus benchmarks via LLM, and deliver calibrated scores with actionable transformation roadmaps.
+🔗 **Live Application**: [https://answer-writing-evaluation.vercel.app/](https://answer-writing-evaluation.vercel.app/)
 
-The system executes a **Deterministic Native DAG (Directed Acyclic Graph)** using an **Ensemble / "Panel of Judges" Architecture**. Five isolated specialist agents evaluate specific dimensions (Demand, Introduction, Structure, Conclusion, and Knowledge & Facts) concurrently via asynchronous fan-out before a Master Scoring Arbiter synthesizes the final calibrated assessment.
+An autonomous multi-agent engine to evaluate UPSC Mains handwritten and digital answers. It uses a parallel "Panel of Judges" architecture where five specialist agents evaluate key dimensions (Demand, Introduction, Structure, Conclusion, and Facts) before a Master Arbiter synthesizes the final calibrated score and feedback.
 
 ---
 
@@ -40,7 +40,7 @@ graph TD
 The platform is deployed across two services:
 
 - **Backend (Render)**: The FastAPI server is deployed as a Docker service on [Render](https://render.com) using the included [Dockerfile](./Dockerfile).
-- **Frontend (Vercel)**: The React + Vite client is deployed on [Vercel](https://vercel.com) from the `frontend/` directory, connecting to the Render backend via `VITE_API_BASE_URL`.
+- **Frontend (Vercel)**: Live at [https://answer-writing-evaluation.vercel.app/](https://answer-writing-evaluation.vercel.app/) (deployed from `frontend/`, connecting to the Render backend via `VITE_API_BASE_URL`).
 
 ---
 
@@ -50,6 +50,23 @@ The evaluation pipeline includes built-in tracing and monitoring powered by [Lan
 - **Multi-Agent Tracing**: Tracks prompts, model calls, latency, token usage, and outputs across all specialist judge agents and the Master Arbiter.
 - **Pipeline Spans**: Traces end-to-end stages including PDF/OCR processing, parallel DAG execution, and database persistence.
 - **Zero Overhead Setup**: Enabled automatically when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are configured in environment variables.
+
+
+---
+
+## 📌 TODO
+
+- [ ] Evaluated Marks Normalization
+- [ ] Comment rendering directly on pdf for better interaction
+- [ ] Test batch processing via running on demand gpu powered machine every X hour for cost control.
+- [ ] Support multi-page PDF batch processing with individual page-level annotations
+- [ ] User authentication
+- [ ] Historical performance trend tracking across attempts
+- [ ] Support for open-source vision & reasoning models (e.g. Qwen2.5-VL, DeepSeek-R1)
+- [ ] Custom evaluation rubrics and subject-specific weightage customization (GS1 vs GS2/3/4)
+- [ ] Custom knowledge base as a vector database to retrieve relevant information for the answer evaluation due to LLMs cut-off date.
+- [ ] Real-time streaming evaluation updates via SSE
+- [ ] Human in the loop verification
 
 ---
 
