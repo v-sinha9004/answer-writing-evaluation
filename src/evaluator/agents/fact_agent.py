@@ -1,4 +1,4 @@
-"""Specialist Agent: Knowledge & Factual Accuracy Evaluator grounded in RAG."""
+"""Specialist Agent: Knowledge & Factual Accuracy Evaluator powered directly by LLM."""
 
 from typing import Optional, List
 from pydantic import BaseModel, Field
@@ -7,7 +7,6 @@ from src.evaluator.base_agent import BaseAgent
 from src.evaluator.observability import observe_stage
 from src.evaluator.schemas import EvaluationInput, KnowledgeEvaluation, FactualClaimCheck, ActionableImprovement, TokenUsage
 from src.evaluator.prompts import FACT_EXTRACTION_PROMPT, FACT_VERIFICATION_PROMPT
-from src.rag.retriever import get_retriever, HybridRetriever
 
 
 class ExtractedClaims(BaseModel):
@@ -16,49 +15,10 @@ class ExtractedClaims(BaseModel):
 
 
 class FactAgent(BaseAgent):
-    """Extracts factual claims, retrieves grounded evidence via Hybrid RAG, and verifies accuracy."""
+    """Extracts factual claims and verifies accuracy against authoritative UPSC syllabus standards via LLM."""
 
-    def __init__(self, retriever: Optional[HybridRetriever] = None, model: Optional[str] = None, **kwargs):
+    def __init__(self, model: Optional[str] = None, **kwargs):
         super().__init__(model=model or FACT_AGENT_MODEL, **kwargs)
-        self.retriever = retriever
-
-    def _get_retriever(self) -> Optional[HybridRetriever]:
-        if self.retriever is not None:
-            return self.retriever
-        try:
-            return get_retriever()
-        except Exception:
-            return None
-
-    @observe_stage(name="rag_hybrid_retrieval", as_type="retriever")
-    def _retrieve_grounded_context(self, claims: List[str], paper: Optional[str] = None) -> str:
-        """Retrieve authentic passages from Hybrid RAG for extracted candidate claims."""
-        retriever = self._get_retriever()
-        grounded_contexts: List[str] = []
-
-        if retriever and claims:
-            seen_chunk_ids = set()
-            where_filter = {"paper": paper} if paper else None
-            for claim in claims[:5]:
-                try:
-                    search_results = retriever.search(query=claim, top_k=2, where_filter=where_filter)
-                    for res in search_results:
-                        cid = res.chunk.id
-                        if cid not in seen_chunk_ids:
-                            seen_chunk_ids.add(cid)
-                            meta = res.chunk.metadata
-                            grounded_contexts.append(
-                                f"--- [Source: {meta.source_file} | Paper: {meta.paper} | Subject: {meta.subject} | Page: {meta.page_number}] ---\n"
-                                f"{res.chunk.content.strip()}"
-                            )
-                except Exception:
-                    continue
-
-        return (
-            "\n\n".join(grounded_contexts)
-            if grounded_contexts
-            else f"[Note: Local RAG passages unavailable or unindexed for {paper or 'UPSC'}. Verify against standard syllabus facts.]"
-        )
 
     @observe_stage(name="fact_agent", as_type="agent")
     async def evaluate(self, input_data: EvaluationInput) -> KnowledgeEvaluation:
@@ -106,14 +66,18 @@ Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
         except Exception:
             claims = []
 
-        # Step 2: Retrieve grounded context from Hybrid RAG for each claim
-        context_block = self._retrieve_grounded_context(claims, paper=paper)
+        # Step 2: Verify claims directly against authoritative UPSC syllabus knowledge
+        ref_section = f"""[REFERENCE KNOWLEDGE BASE]:
+Verify against standard authentic UPSC syllabus benchmarks (NCERTs, standard reference texts for {paper.upper() if paper else 'General Studies'}, Constitution of India, Supreme Court precedents, and official reports)."""
 
-        # Step 3: Verify claims against reference passages
-        verification_user_prompt = f"""VERIFY THE CANDIDATE'S FACTUAL CLAIMS AGAINST THE GROUNDED REFERENCE TEXT:
+        # Step 3: Verify claims against UPSC knowledge base / reference passages
+        verification_user_prompt = f"""VERIFY THE CANDIDATE'S FACTUAL CLAIMS:
 
 [QUESTION]:
 "{input_data.question_text}"
+
+[SUBJECT PAPER]:
+"{paper.upper() if paper else 'GENERAL STUDIES'}"
 
 [EXTRACTED CLAIMS TO VERIFY]:
 {chr(10).join(f"- {c}" for c in claims) if claims else "- General factual assertions in the answer"}
@@ -121,16 +85,13 @@ Extract 3 to 6 key testable assertions (dates, names, acts, events, treaties).
 [CANDIDATE ANSWER]:
 \"\"\"{body_text}\"\"\"
 
-[AUTHENTIC REFERENCE PASSAGES ({paper.upper()} REFERENCE)]:
-\"\"\"
-{context_block}
-\"\"\"
+{ref_section}
 
 For each claim:
 1. Mark VERIFIED, INCORRECT, or UNVERIFIED.
-2. If INCORRECT, provide the exact correction quoting the reference text.
+2. If INCORRECT, provide the exact correction citing the standard authority or reference text.
 3. Assign a factual_accuracy_score (0-10).
-4. Suggest 2-3 core syllabus concepts from the reference text to enrich the answer.
+4. Suggest 2-3 core syllabus concepts/keywords from the standard syllabus to enrich the answer.
 5. Provide ActionableImprovement items with ready-to-insert corrections.
 6. Mark INCORRECT only when contradictory/opposite claims are provided otherwise mark it as UNVERIFIED.
 7. Don't mark a claim as INCORRECT if the answer is partially correct or not fully mentioned.

@@ -59,47 +59,16 @@ def get_agent_models() -> dict[str, str]:
         "vision": VISION_AGENT_MODEL,
     }
 
-# Embedding Settings
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
-
 # Storage & Paths
 DATA_DIR = ROOT_DIR / "data"
 DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "supabase").strip().lower()
 DATABASE_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "evaluations.db")))
-VECTOR_STORE_BACKEND = os.getenv("VECTOR_STORE_BACKEND", "supabase").strip().lower()
-SUPABASE_VECTOR_TABLE = os.getenv("SUPABASE_VECTOR_TABLE", "knowledge_chunks").strip()
-CHROMA_PERSIST_DIR = Path(os.getenv("CHROMA_PERSIST_DIR", str(DATA_DIR / "chromadb")))
-BM25_PERSIST_DIR = Path(os.getenv("BM25_PERSIST_DIR", str(DATA_DIR / "bm25")))
-RESOURCES_DIR = DATA_DIR / "resources"
-ROOT_RESOURCES_DIR = ROOT_DIR / "resources"
 
-
-
-# Collection & Chunking Defaults
-DEFAULT_COLLECTION_NAME = os.getenv("DEFAULT_COLLECTION_NAME", "upsc_knowledge_base")
-CHUNK_SIZE_TOKENS = 600
-CHUNK_OVERLAP_TOKENS = 120
-BATCH_SIZE = 100
-
-def get_resource_search_paths() -> list[Path]:
-    """Return all directories to search for syllabus resource PDFs."""
-    paths = []
-    if RESOURCES_DIR.exists():
-        paths.append(RESOURCES_DIR)
-    if ROOT_RESOURCES_DIR.exists():
-        paths.append(ROOT_RESOURCES_DIR)
-    if not paths:
-        paths.append(RESOURCES_DIR)
-    return paths
 
 def ensure_directories():
     """Ensure persistent storage directories exist."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
-    BM25_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
-    RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Supabase Cloud Settings

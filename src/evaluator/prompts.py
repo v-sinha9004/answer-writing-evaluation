@@ -109,27 +109,31 @@ Your job is to evaluate the candidate's closing paragraph.
    - Deliver an authoritative, 30-word model conclusion bridging historical struggle to modern constitutional democracy.
 """
 
-FACT_EXTRACTION_PROMPT = """You are an expert factual claim extractor for UPSC General Studies Mains answers.
+FACT_EXTRACTION_PROMPT = """You are an expert factual claim extractor for UPSC General Studies Mains answers across GS-1, GS-2, GS-3, and GS-4.
 
-Given the candidate's answer, extract the key testable factual assertions, dates, named individuals, publications, acts, and historical claims.
+Given the candidate's answer, extract 3 to 6 key testable factual assertions, dates, named individuals, constitutional articles/amendments, committee reports, schemes, publications, acts, and historical claims.
 Ignore purely subjective opinions. Return a JSON list of claim strings.
 Example claims:
-- "The Hindu, Bengalee etc were first English Newspapers"
-- "Vernacular act banned local papers"
-- "Amrita Bazar Patrika turned to English overnight"
+- "The Hindu and Bengalee were prominent nationalist newspapers during the anti-partition movement"
+- "Article 21 was expanded in the Menaka Gandhi case (1978) to include the right to live with dignity"
+- "Vernacular Press Act 1878 was passed during Lord Lytton's tenure"
 """
 
-FACT_VERIFICATION_PROMPT = """You are a meticulous UPSC History & Fact Verification Examiner.
+FACT_VERIFICATION_PROMPT = """You are a meticulous UPSC Fact Verification & Subject Matter Examiner across General Studies (GS-1, GS-2, GS-3, GS-4).
 
-Verify the candidate's claims against the provided reference knowledge passages retrieved from authentic UPSC syllabus textbooks.
+Verify the candidate's claims using authoritative UPSC standard knowledge (standard textbooks, NCERTs, Indian Constitution, Supreme Court judgments, government acts, and standard syllabus references) along with any provided reference passages.
 
 ### VERIFICATION CRITERIA:
-1. VERIFIED: Claim is historically accurate and consistent with the reference passages.
-2. INCORRECT: Claim contains factual errors (wrong dates, wrong personalities, wrong acts, anachronisms). Provide the exact correction and quote the reference passage.
-3. UNVERIFIED: The claim cannot be verified from the retrieved reference text, but is not contradictory.
+1. VERIFIED: Claim is factually, historically, and conceptually accurate according to standard UPSC syllabus benchmarks.
+2. INCORRECT: Claim contains clear factual errors (wrong dates, wrong personalities, wrong constitutional articles/amendments, incorrect committee names, inverted facts, anachronisms). Provide the exact correction and cite the standard authority (e.g., 'Constitution Art. 21', 'Spectrum Modern History', 'Laxmikanth Polity', 'Economic Survey').
+3. UNVERIFIED: The claim is ambiguous, speculative, or lacks sufficient verifiable specifics to determine accuracy, but is not contradictory.
 
-For each incorrect or weak point, specify an ActionableImprovement with the exact correction and citation.
-Suggest 2-3 core syllabus concepts from the reference text that the candidate should have included (Syllabus Enrichments).
+### RULES:
+- Mark INCORRECT only when contradictory/opposite or demonstrably false claims are made.
+- Do NOT mark a claim as INCORRECT if the answer is partially correct, uses acceptable alternative phrasing, or is not fully exhaustive.
+- For each incorrect or weak point, specify an ActionableImprovement with the exact correction and citation.
+- Suggest 2-3 core syllabus concepts/keywords to enrich the answer (Syllabus Enrichments).
+- Assign a calibrated factual_accuracy_score (0-10) reflecting overall factual precision.
 """
 
 MASTER_ARBITER_PROMPT = """You are the Chief UPSC Mains Evaluation Arbiter and Master Scoring Synthesizer.
@@ -139,7 +143,7 @@ Your role is to synthesize the specialist evaluations (Demand, Intro, Structure,
 ### RESPONSIBILITIES:
 1. CALIBRATED SCORING FORMULA:
    - Demand & Directive: 30%
-   - Knowledge & Facts (RAG): 35%
+   - Knowledge & Facts: 35%
    - Introduction: 10%
    - Structure & Flow: 10%
    - Conclusion & Way Forward: 15%

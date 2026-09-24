@@ -1,8 +1,8 @@
 # Autonomous UPSC Mains Answer Evaluation & Feedback Engine
 
-An autonomous, multi-agent evaluation engine designed to assess UPSC Mains handwritten and digital answer copies, verify facts against grounded syllabus knowledge via Hybrid RAG, and deliver calibrated scores with actionable transformation roadmaps.
+An autonomous, multi-agent evaluation engine designed to assess UPSC Mains handwritten and digital answer copies, verify facts against authoritative syllabus benchmarks via LLM, and deliver calibrated scores with actionable transformation roadmaps.
 
-The system executes a **Deterministic Native DAG (Directed Acyclic Graph)** using an **Ensemble / "Panel of Judges" Architecture**. Five isolated specialist agents evaluate specific dimensions (Demand, Introduction, Structure, Conclusion, and RAG-grounded Facts) concurrently via asynchronous fan-out before a Master Scoring Arbiter synthesizes the final calibrated assessment.
+The system executes a **Deterministic Native DAG (Directed Acyclic Graph)** using an **Ensemble / "Panel of Judges" Architecture**. Five isolated specialist agents evaluate specific dimensions (Demand, Introduction, Structure, Conclusion, and Knowledge & Facts) concurrently via asynchronous fan-out before a Master Scoring Arbiter synthesizes the final calibrated assessment.
 
 ---
 
@@ -41,21 +41,10 @@ graph TD
         Conclusion["<b>Conclusion & Way Forward Agent</b><br/>• Forward-looking perspective<br/>• Constitutional & national policy grounding<br/>• Produces: ConclusionEvaluation + Model Conclusion Rewrite"]
 
         subgraph FactPipeline["Knowledge & Fact Verification Sub-DAG"]
-            ClaimExtract["<b>1. Claim Extraction</b><br/>Extract 3-6 testable assertions<br/>(dates, acts, treaties, events)"]
-            
-            subgraph HybridRAGStore["Hybrid RAG Retrieval Engine"]
-                Dense["ChromaDB Vector Store<br/>(text-embedding-3-small)"]
-                Sparse["BM25 Lexical Index<br/>(Tokenized Ranker)"]
-                RRF["Reciprocal Rank Fusion<br/>(RRF Score Aggregator)"]
-                Dense --> RRF
-                Sparse --> RRF
-            end
+            ClaimExtract["<b>1. Claim Extraction</b><br/>Extract 3-6 testable assertions<br/>(dates, acts, articles, treaties)"]
+            ClaimVerify["<b>2. UPSC Syllabus Fact Verification</b><br/>Verify claims against NCERTs, Constitution & standard texts<br/>Classify: VERIFIED / INCORRECT / UNVERIFIED<br/>Syllabus enrichments & corrections"]
 
-            ClaimVerify["<b>2. Grounded Fact Verification</b><br/>Cross-reference against Spectrum passages<br/>Classify: VERIFIED / INCORRECT / UNVERIFIED<br/>Syllabus enrichments & corrections"]
-
-            ClaimExtract --> Dense
-            ClaimExtract --> Sparse
-            RRF --> ClaimVerify
+            ClaimExtract --> ClaimVerify
         end
     end
 
@@ -124,7 +113,7 @@ graph TD
 | **2. Introduction Agent** | [`intro_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/intro_agent.py) | `question_text`, `detected_intro`, `question_marks` | • Validates introduction presence<br/>• Assesses conciseness (target: 30-40 words)<br/>• Checks contextual definition, origin, or contemporary background | **10%** | `intro_present` (bool), `intro_score` (0-10), `conciseness_score`, `contextual_score`, plug-and-play `model_intro_rewrite` |
 | **3. Structure & Presentation Agent** | [`structure_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/structure_agent.py) | `question_text`, `full_markdown_text` | • Audits heading taxonomy (`### Headings` matching question keywords)<br/>• Enforces bullet formatting discipline and bold keyword prefixes<br/>• Evaluates logical flow and readability transitions | **10%** | `structural_score` (0-10), `heading_taxonomy_score`, `bullet_discipline_score`, concrete formatting upgrades |
 | **4. Conclusion & Way Forward Agent** | [`conclusion_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/conclusion_agent.py) | `question_text`, `detected_conclusion`, `question_marks` | • Validates conclusion presence<br/>• Assesses forward-looking balance (Way Forward / solutions)<br/>• Bridges topic to constitutional values, SDGs, or national vision | **15%** | `conclusion_present` (bool), `conclusion_score` (0-10), `forward_looking_score`, `balance_score`, plug-and-play `model_conclusion_rewrite` |
-| **5. Knowledge & Fact Agent** | [`fact_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/fact_agent.py) | `question_text`, `full_markdown_text`, Hybrid RAG | **Sub-DAG:**<br/>1. Extracts 3-6 testable factual claims (dates, acts, articles, treaties)<br/>2. Retrieves authentic passages via Hybrid RAG (ChromaDB dense vectors + BM25 sparse lexical search + RRF fusion)<br/>3. Verifies each claim (`VERIFIED`, `INCORRECT`, `UNVERIFIED`) and provides textbook corrections | **35%** | `factual_accuracy_score` (0-10), itemized `claims_checked` with corrections and citations, `syllabus_enrichments` |
+| **5. Knowledge & Fact Agent** | [`fact_agent.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/fact_agent.py) | `question_text`, `full_markdown_text` | **Sub-DAG:**<br/>1. Extracts 3-6 testable factual claims (dates, acts, articles, treaties, committees)<br/>2. Verifies each claim against standard UPSC syllabus knowledge (`VERIFIED`, `INCORRECT`, `UNVERIFIED`)<br/>3. Provides precise corrections, citations, and core syllabus enrichments | **35%** | `factual_accuracy_score` (0-10), itemized `claims_checked` with corrections and citations, `syllabus_enrichments` |
 | **6. Master Scoring Arbiter** | [`master_arbiter.py`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/agents/master_arbiter.py) | Outputs of all 5 specialists + Vision OCR Engine payload | • Deterministic mathematical score aggregation with dynamic re-weighting upon partial failures<br/>• Applies penalties (missing intro/conclusion, severe under-length)<br/>• Calibrates score against real-world UPSC benchmarks<br/>• Synthesizes unified Transformation Roadmap and Top 3 Value Additions<br/>• Consolidates token usage telemetry | Arbiter / Fan-In | [`ComprehensiveEvaluationReport`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py), [`ConsolidatedScorecard`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py), [`TransformationRoadmap`](file:///Users/vishalsinha/Documents/answer%20writing%20evaluation/src/evaluator/schemas.py) |
 
 ---
@@ -164,7 +153,7 @@ Scores are mapped directly to calibrated UPSC percentile tiers:
   ├── Step 3: Introduction Evaluator Agent & Model Rewrites
   ├── Step 4: Structure & Heading Taxonomy Evaluator Agent
   ├── Step 5: Conclusion & Way Forward Evaluator Agent
-  ├── Step 6: Knowledge & Fact Agent with Hybrid RAG (ChromaDB + BM25 + RRF)
+  ├── Step 6: Knowledge & Fact Evaluator Agent (Authoritative LLM Fact-Checking)
   ├── Step 7: Master Scoring Arbiter & Qualitative Transformation Roadmap
   └── Step 8: Asynchronous Orchestrator DAG with Fault-Tolerant Fan-Out / Fan-In
                 │

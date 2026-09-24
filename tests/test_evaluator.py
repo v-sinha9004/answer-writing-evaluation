@@ -360,51 +360,30 @@ def test_orchestrator_parallel_mock_execution():
     asyncio.run(_run())
 
 
-def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
-    """Verify FactAgent extracts claims and queries HybridRetriever for grounded evidence."""
+def test_fact_agent_llm_evaluation():
+    """Verify FactAgent operates in pure LLM mode without requiring a vector DB or retriever."""
     async def _run():
-        # Setup in-memory vector store with isolated collection name & temp BM25 store
-        from src.rag.store import ChromaVectorStore
-        from src.rag.retriever import BM25Store, HybridRetriever
-        from src.rag.embeddings import EmbeddingClient
+        fact_agent = FactAgent()
 
-        store = ChromaVectorStore(collection_name="test_fact_agent_isolated", in_memory=True)
-        store.upsert(sample_modern_history_chunks)
-
-        bm25_store = BM25Store(persist_path=tmp_path / "fact_bm25.pkl")
-        bm25_store.build_and_save(sample_modern_history_chunks)
-
-        mock_embedding_client = MagicMock(spec=EmbeddingClient)
-        mock_embedding_client.embed_query.return_value = [-0.05] * 1536
-
-        retriever = HybridRetriever(
-            vector_store=store,
-            embedding_client=mock_embedding_client,
-            bm25_store=bm25_store,
-        )
-
-        fact_agent = FactAgent(retriever=retriever)
-
-        # Mock claim extraction step
         extracted_mock = ExtractedClaims(
-            claims=["The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855."]
+            claims=["Article 21 guarantees the right to life and personal liberty."]
         )
         verified_mock = KnowledgeEvaluation(
-            factual_accuracy_score=8.5,
+            factual_accuracy_score=9.0,
             claims_checked=[
                 FactualClaimCheck(
-                    claim="The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855.",
+                    claim="Article 21 guarantees the right to life and personal liberty.",
                     verdict="VERIFIED",
-                    grounded_evidence="The Santhal Rebellion took place between 1855 and 1856 under Sidhu and Kanhu Murmu.",
-                    source_citation="Spectrum Modern History p. 201",
+                    grounded_evidence=None,
+                    source_citation="Constitution of India, Article 21",
                 )
             ],
-            syllabus_enrichments=["Damin-i-Koh region", "Santhal Parganas Tenancy Act"],
-            critique="Accurate historical claim grounded in reference store.",
+            syllabus_enrichments=["Maneka Gandhi case (1978)", "Due process of law"],
+            critique="Accurate constitutional assertion.",
         )
 
-        mock_usage_1 = TokenUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
-        mock_usage_2 = TokenUsage(prompt_tokens=200, completion_tokens=80, total_tokens=280)
+        mock_usage_1 = TokenUsage(prompt_tokens=80, completion_tokens=40, total_tokens=120)
+        mock_usage_2 = TokenUsage(prompt_tokens=150, completion_tokens=70, total_tokens=220)
 
         with patch.object(
             fact_agent,
@@ -412,21 +391,25 @@ def test_fact_agent_rag_integration(sample_modern_history_chunks, tmp_path):
             side_effect=[(extracted_mock, mock_usage_1), (verified_mock, mock_usage_2)],
         ) as mock_call:
             input_data = EvaluationInput(
-                question_text="Examine tribal uprisings with reference to Santhal rebellion.",
+                question_text="Discuss the expansion of Article 21 of the Indian Constitution.",
                 question_marks=10,
-                full_markdown_text="The Santhal Rebellion was led by Sidhu and Kanhu Murmu in 1855 against zamindars.",
+                subject_paper="gs2",
+                full_markdown_text="Article 21 guarantees the right to life and personal liberty.",
             )
             result = await fact_agent.evaluate(input_data)
 
-            assert result.factual_accuracy_score == 8.5
+            assert result.factual_accuracy_score == 9.0
             assert len(result.claims_checked) == 1
             assert result.claims_checked[0].verdict == "VERIFIED"
-            assert "Damin-i-Koh" in result.syllabus_enrichments[0]
-            assert result.token_usage.prompt_tokens == 300
-            assert result.token_usage.completion_tokens == 130
-            assert result.token_usage.total_tokens == 430
-            # Ensure run_structured_with_usage was called twice (extraction + verification)
+            assert result.claims_checked[0].source_citation == "Constitution of India, Article 21"
+            assert "Maneka Gandhi" in result.syllabus_enrichments[0]
+            assert result.token_usage.total_tokens == 340
             assert mock_call.call_count == 2
+            # Verify that the verification prompt contained the pure LLM reference knowledge base text
+            verification_call_args = mock_call.call_args_list[1]
+            user_prompt_passed = verification_call_args.kwargs.get("user_prompt") or verification_call_args.args[1]
+            assert "[REFERENCE KNOWLEDGE BASE]:" in user_prompt_passed
+            assert "GS2" in user_prompt_passed
 
     asyncio.run(_run())
 

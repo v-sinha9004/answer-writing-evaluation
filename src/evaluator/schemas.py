@@ -160,14 +160,14 @@ class ConclusionEvaluation(BaseModel):
 class FactualClaimCheck(BaseModel):
     """Verification record of an extracted factual assertion."""
     claim: str = Field(description="The specific factual claim made by the candidate")
-    verdict: Literal["VERIFIED", "INCORRECT", "UNVERIFIED"] = Field(description="RAG verification result")
-    grounded_evidence: Optional[str] = Field(default=None, description="Supporting passage from the RAG store")
+    verdict: Literal["VERIFIED", "INCORRECT", "UNVERIFIED"] = Field(description="Factual verification result")
+    grounded_evidence: Optional[str] = Field(default=None, description="Supporting passage or syllabus basis")
     correction: Optional[str] = Field(default=None, description="Factual correction if incorrect")
-    source_citation: Optional[str] = Field(default=None, description="Source book, subject, or page number")
+    source_citation: Optional[str] = Field(default=None, description="Source authority, act, article, or standard textbook")
 
 
 class KnowledgeEvaluation(BaseModel):
-    """Evaluation of factual accuracy grounded against reference knowledge store."""
+    """Evaluation of factual accuracy against standard UPSC syllabus knowledge."""
     status: Literal["SUCCESS", "FAILED", "SKIPPED"] = Field(
         default="SUCCESS",
         description="Technical execution status. Always 'SUCCESS' for completed evaluation."
