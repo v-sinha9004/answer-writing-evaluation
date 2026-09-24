@@ -17,11 +17,7 @@ from src.evaluator.schemas import (
     KnowledgeEvaluation,
     TokenUsage,
 )
-from src.config import (
-    MASTER_ARBITER_MODEL,
-    UPSC_MAX_AWARDABLE_MARKS,
-    UPSC_DEFAULT_MAX_RATIO,
-)
+from src.config import MASTER_ARBITER_MODEL
 from src.evaluator.prompts import MASTER_ARBITER_PROMPT
 
 
@@ -107,12 +103,8 @@ class MasterScoringAgent(BaseAgent):
             for dim in raw_scores
         )
 
-        # Scale to realistic UPSC max awardable ceiling (e.g. 5.5 for 10M, 8.5 for 15M)
-        max_awardable = UPSC_MAX_AWARDABLE_MARKS.get(
-            max_marks,
-            round(max_marks * UPSC_DEFAULT_MAX_RATIO, 1),
-        )
-        scaled_score = min(max_awardable, round((weighted_out_of_10 / 10.0) * max_awardable, 2))
+        # Scale to max_marks
+        scaled_score = round((weighted_out_of_10 / 10.0) * max_marks, 2)
 
         # Apply deterministic penalty adjustments
         penalties: List[str] = []
@@ -121,56 +113,55 @@ class MasterScoringAgent(BaseAgent):
         if not conclusion_eval.conclusion_present:
             penalties.append("Missing Conclusion: Awarded 0/10 for Way Forward.")
 
-        # Under-length penalty (scaled proportionally to realistic marks ceiling)
+        # Under-length penalty
         expected_words = 150 if max_marks <= 10 else 250
         if input_data.estimated_word_count > 0 and input_data.estimated_word_count < (expected_words * 0.45):
-            penalty_deduction = 0.5 if max_marks <= 10 else 0.8
-            scaled_score = max(0.0, round(scaled_score - penalty_deduction, 2))
-            penalties.append(f"Severely under-length ({input_data.estimated_word_count} words vs ~{expected_words} expected): -{penalty_deduction} mark deduction.")
+            scaled_score = max(0.0, round(scaled_score - 1.0, 2))
+            penalties.append(f"Severely under-length ({input_data.estimated_word_count} words vs ~{expected_words} expected): -1.0 mark deduction.")
 
         percentage = round((scaled_score / max_marks) * 100.0, 1)
 
-        # Calibrated benchmark tier aligned with realistic UPSC GS evaluation bands
-        if percentage < 22.0:
+        # Calibrated benchmark tier
+        if percentage < 35.0:
             benchmark = "Below Average / Needs Fundamental Revision"
-        elif percentage < 35.0:
+        elif percentage < 50.0:
             benchmark = "Average / Baseline Attempt"
-        elif percentage < 45.0:
+        elif percentage < 65.0:
             benchmark = "Good / Competitive Mains Standard"
         else:
             benchmark = "Topper Quality / Exceptional Answer"
 
-        # Build dimension breakdown dictionary (effective marks scale against max_awardable ceiling)
+        # Build dimension breakdown dictionary
         dimensions_dict: Dict[str, DimensionScore] = {
             "Demand & Directive": DimensionScore(
                 dimension_name="Demand & Directive",
                 raw_score_out_of_10=round(raw_scores["demand"], 1),
                 weight_pct=round(normalized_weights.get("demand", 0.0) * 100.0, 1),
-                effective_marks=round((raw_scores["demand"] / 10.0) * normalized_weights.get("demand", 0.0) * max_awardable, 2),
+                effective_marks=round((raw_scores["demand"] / 10.0) * normalized_weights.get("demand", 0.0) * max_marks, 2),
             ),
             "Knowledge & Facts": DimensionScore(
                 dimension_name="Knowledge & Facts",
                 raw_score_out_of_10=round(raw_scores["knowledge"], 1),
                 weight_pct=round(normalized_weights.get("knowledge", 0.0) * 100.0, 1),
-                effective_marks=round((raw_scores["knowledge"] / 10.0) * normalized_weights.get("knowledge", 0.0) * max_awardable, 2),
+                effective_marks=round((raw_scores["knowledge"] / 10.0) * normalized_weights.get("knowledge", 0.0) * max_marks, 2),
             ),
             "Introduction": DimensionScore(
                 dimension_name="Introduction",
                 raw_score_out_of_10=round(raw_scores["intro"], 1),
                 weight_pct=round(normalized_weights.get("intro", 0.0) * 100.0, 1),
-                effective_marks=round((raw_scores["intro"] / 10.0) * normalized_weights.get("intro", 0.0) * max_awardable, 2),
+                effective_marks=round((raw_scores["intro"] / 10.0) * normalized_weights.get("intro", 0.0) * max_marks, 2),
             ),
             "Structure & Presentation": DimensionScore(
                 dimension_name="Structure & Presentation",
                 raw_score_out_of_10=round(raw_scores["structure"], 1),
                 weight_pct=round(normalized_weights.get("structure", 0.0) * 100.0, 1),
-                effective_marks=round((raw_scores["structure"] / 10.0) * normalized_weights.get("structure", 0.0) * max_awardable, 2),
+                effective_marks=round((raw_scores["structure"] / 10.0) * normalized_weights.get("structure", 0.0) * max_marks, 2),
             ),
             "Conclusion & Way Forward": DimensionScore(
                 dimension_name="Conclusion & Way Forward",
                 raw_score_out_of_10=round(raw_scores["conclusion"], 1),
                 weight_pct=round(normalized_weights.get("conclusion", 0.0) * 100.0, 1),
-                effective_marks=round((raw_scores["conclusion"] / 10.0) * normalized_weights.get("conclusion", 0.0) * max_awardable, 2),
+                effective_marks=round((raw_scores["conclusion"] / 10.0) * normalized_weights.get("conclusion", 0.0) * max_marks, 2),
             ),
         }
 

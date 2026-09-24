@@ -59,14 +59,6 @@ def get_agent_models() -> dict[str, str]:
         "vision": VISION_AGENT_MODEL,
     }
 
-# UPSC Realistic Scoring Ceilings
-# In authentic UPSC Mains grading, topper answers cap at ~5.5/10 and ~8.5/15.
-UPSC_MAX_AWARDABLE_MARKS: dict[int, float] = {
-    10: 5.5,
-    15: 8.5,
-}
-UPSC_DEFAULT_MAX_RATIO: float = 0.567  # Default ceiling ratio for custom question marks (e.g., 12.5, 20)
-
 # Embedding Settings
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
