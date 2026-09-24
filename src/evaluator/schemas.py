@@ -31,6 +31,7 @@ class EvaluationInput(BaseModel):
     legibility_status: Optional[str] = Field(default="AVERAGE", description="CLEAR, AVERAGE, or POOR")
     subject_paper: str = Field(default="GS-1", description="General Studies paper code: GS-1, GS-2, etc.")
     ocr_json: Optional[str] = Field(default=None, description="Raw OCR JSON transcription output")
+    pdf_url: Optional[str] = Field(default=None, description="Public URL to the candidate answer PDF in cloud storage")
 
     @field_validator("question_marks", mode="before")
     @classmethod
@@ -236,6 +237,7 @@ class ComprehensiveEvaluationReport(BaseModel):
     paper: Optional[str] = Field(default=None, description="General Studies paper code: GS-1, GS-2, etc.")
     question_text: Optional[str] = Field(default=None, description="Question statement evaluated")
     filename: Optional[str] = Field(default=None, description="Source PDF filename or sample title")
+    pdf_url: Optional[str] = Field(default=None, description="Public URL to the candidate answer PDF in cloud storage")
     scorecard: ConsolidatedScorecard
     executive_summary: Optional[str] = Field(default=None, description="Deprecated; formerly candid examiner assessment")
     demand_evaluation: DemandEvaluation

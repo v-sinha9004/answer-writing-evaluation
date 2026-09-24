@@ -43,6 +43,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 full_answer_text TEXT,
                 report_json TEXT NOT NULL,
                 ocr_json TEXT,
+                pdf_url TEXT,
                 total_latency_seconds REAL DEFAULT 0.0
             );
             """
@@ -53,9 +54,13 @@ def init_db(db_path: Optional[Path] = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_evaluations_paper ON evaluations(paper);"
         )
-        # Safe migration for existing evaluations table to add ocr_json if missing
+        # Safe migration for existing evaluations table to add ocr_json and pdf_url if missing
         try:
             conn.execute("ALTER TABLE evaluations ADD COLUMN ocr_json TEXT;")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            conn.execute("ALTER TABLE evaluations ADD COLUMN pdf_url TEXT;")
         except sqlite3.OperationalError:
             pass  # Column already exists
         conn.commit()
@@ -66,6 +71,7 @@ def save_evaluation(
     report: ComprehensiveEvaluationReport,
     filename: Optional[str] = None,
     ocr_json: Optional[Union[str, Dict[str, Any]]] = None,
+    pdf_url: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> str:
     """Save an evaluation report and candidate answer input into SQLite."""
@@ -77,12 +83,20 @@ def save_evaluation(
     eval_id = f"eval_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    # Determine PDF URL from arguments, input_data or report
+    final_pdf_url = (
+        pdf_url
+        or getattr(input_data, "pdf_url", None)
+        or getattr(report, "pdf_url", None)
+    )
+
     # Enrich report with metadata
     report.id = eval_id
     report.created_at = now_iso
     report.paper = input_data.subject_paper
     report.question_text = input_data.question_text
     report.filename = filename
+    report.pdf_url = final_pdf_url
 
     scorecard = report.scorecard
     report_json_str = report.model_dump_json()
@@ -99,8 +113,8 @@ def save_evaluation(
                 id, created_at, paper, marks, question_text, filename,
                 word_count, legibility_status, total_score, max_marks,
                 percentage, benchmark_verdict,
-                full_answer_text, report_json, ocr_json, total_latency_seconds
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                full_answer_text, report_json, ocr_json, pdf_url, total_latency_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 eval_id,
@@ -118,6 +132,7 @@ def save_evaluation(
                 input_data.full_markdown_text,
                 report_json_str,
                 final_ocr_json,
+                final_pdf_url,
                 report.total_latency_seconds,
             ),
         )
@@ -155,6 +170,7 @@ def get_evaluation(
             "marks": row["marks"],
             "question_text": row["question_text"],
             "filename": row["filename"],
+            "pdf_url": row["pdf_url"] if "pdf_url" in row.keys() else None,
             "word_count": row["word_count"],
             "legibility_status": row["legibility_status"],
             "total_score": row["total_score"],
@@ -180,7 +196,7 @@ def list_evaluations(
     query = (
         "SELECT id, created_at, paper, marks, question_text, filename, "
         "word_count, legibility_status, total_score, max_marks, percentage, "
-        "benchmark_verdict, total_latency_seconds FROM evaluations "
+        "benchmark_verdict, pdf_url, total_latency_seconds FROM evaluations "
     )
     params: List[Any] = []
 
@@ -202,6 +218,7 @@ def list_evaluations(
                 "marks": r["marks"],
                 "question_text": r["question_text"],
                 "filename": r["filename"],
+                "pdf_url": r["pdf_url"] if "pdf_url" in r.keys() else None,
                 "word_count": r["word_count"],
                 "legibility_status": r["legibility_status"],
                 "total_score": r["total_score"],
@@ -212,6 +229,7 @@ def list_evaluations(
             }
             for r in rows
         ]
+
 
 
 def delete_evaluation(evaluation_id: str, db_path: Optional[Path] = None) -> bool:

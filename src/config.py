@@ -98,3 +98,15 @@ def ensure_directories():
     BM25_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
     RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
 
+
+# Supabase Cloud Settings
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+SUPABASE_PROJECT_ID = os.getenv("SUPABASE_PROJECT_ID", "").strip()
+SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "answer-copies").strip()
+
+
+def is_supabase_configured() -> bool:
+    """Check if Supabase credentials are configured."""
+    return bool(SUPABASE_URL and SUPABASE_ANON_KEY)
+
