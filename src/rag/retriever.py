@@ -5,9 +5,9 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from rank_bm25 import BM25Okapi
-from src.config import BM25_PERSIST_DIR
+from src.config import BM25_PERSIST_DIR, DEFAULT_COLLECTION_NAME
 from src.rag.schema import FactChunk, RetrievalResult
-from src.rag.store import BaseVectorStore, ChromaVectorStore
+from src.rag.store import BaseVectorStore, ChromaVectorStore, get_vector_store
 from src.rag.embeddings import EmbeddingClient
 
 
@@ -215,9 +215,15 @@ class HybridRetriever:
         return final_results
 
 
-def get_retriever() -> HybridRetriever:
-    """Factory function to get default configured HybridRetriever."""
-    store = ChromaVectorStore()
+def get_retriever(
+    backend: Optional[str] = None,
+    collection_name: Optional[str] = None,
+) -> HybridRetriever:
+    """Factory function to get configured HybridRetriever with specified or default vector backend."""
+    store = get_vector_store(
+        backend=backend,
+        collection_name=collection_name or DEFAULT_COLLECTION_NAME,
+    )
     embedding_client = EmbeddingClient()
     bm25 = BM25Store()
     bm25.load()

@@ -1,12 +1,29 @@
-"""Vector store abstraction layer and ChromaDB implementation."""
+"""Vector store abstraction layer with ChromaDB and Supabase pgvector implementations."""
 
+import os
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from dotenv import load_dotenv
+
 import chromadb
 from chromadb.config import Settings
-from src.config import CHROMA_PERSIST_DIR, DEFAULT_COLLECTION_NAME
+from supabase import create_client, Client
+
+from src.config import (
+    ROOT_DIR,
+    CHROMA_PERSIST_DIR,
+    DEFAULT_COLLECTION_NAME,
+    VECTOR_STORE_BACKEND,
+    SUPABASE_VECTOR_TABLE,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    is_supabase_configured,
+)
 from src.rag.schema import FactChunk, ChunkMetadata
+
+logger = logging.getLogger("upsc-vector-store")
 
 
 class BaseVectorStore(ABC):
@@ -206,3 +223,226 @@ class ChromaVectorStore(BaseVectorStore):
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"}
         )
+
+
+class SupabaseVectorStore(BaseVectorStore):
+    """Supabase pgvector implementation of BaseVectorStore."""
+
+    def __init__(
+        self,
+        table_name: Optional[str] = None,
+        url: Optional[str] = None,
+        key: Optional[str] = None,
+    ):
+        load_dotenv(ROOT_DIR / ".env", override=True)
+        self.table_name = (
+            table_name
+            or os.getenv("SUPABASE_VECTOR_TABLE")
+            or SUPABASE_VECTOR_TABLE
+            or "knowledge_chunks"
+        ).strip()
+        self.url = (url or os.getenv("SUPABASE_URL") or SUPABASE_URL).strip()
+        self.key = (key or os.getenv("SUPABASE_ANON_KEY") or SUPABASE_ANON_KEY).strip()
+        self._client: Optional[Client] = None
+
+    @property
+    def client(self) -> Client:
+        """Lazy-initialize Supabase client."""
+        load_dotenv(ROOT_DIR / ".env", override=True)
+        url = (self.url or os.getenv("SUPABASE_URL") or "").strip()
+        key = (self.key or os.getenv("SUPABASE_ANON_KEY") or "").strip()
+
+        if not url or not key:
+            raise RuntimeError(
+                "Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in your environment or .env file."
+            )
+
+        if self._client is None:
+            self._client = create_client(url, key)
+        return self._client
+
+    def is_configured(self) -> bool:
+        """Check if Supabase credentials are configured."""
+        load_dotenv(ROOT_DIR / ".env", override=True)
+        url = self.url or os.getenv("SUPABASE_URL", "")
+        key = self.key or os.getenv("SUPABASE_ANON_KEY", "")
+        return bool(url and key)
+
+    def upsert(self, chunks: List[FactChunk], batch_size: int = 100) -> int:
+        """Upsert chunks with their embeddings into Supabase pgvector table in batches."""
+        if not chunks:
+            return 0
+
+        total_upserted = 0
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
+            records = []
+            for chunk in batch:
+                if chunk.embedding is None:
+                    raise ValueError(f"Chunk '{chunk.id}' has no embedding vector.")
+                records.append({
+                    "id": chunk.id,
+                    "content": chunk.content,
+                    "prefixed_content": chunk.prefixed_content,
+                    "paper": chunk.metadata.paper,
+                    "subject": chunk.metadata.subject,
+                    "source_file": chunk.metadata.source_file,
+                    "page_number": chunk.metadata.page_number,
+                    "token_count": chunk.metadata.token_count,
+                    "metadata": chunk.metadata.to_dict(),
+                    "embedding": chunk.embedding,
+                })
+            self.client.table(self.table_name).upsert(records).execute()
+            total_upserted += len(batch)
+
+        return total_upserted
+
+    def query(
+        self,
+        vector: List[float],
+        top_k: int = 5,
+        where: Optional[Dict[str, Any]] = None,
+    ) -> List[FactChunk]:
+        """Perform vector cosine similarity search via match_knowledge_chunks RPC."""
+        if not self.is_configured():
+            return []
+
+        try:
+            rpc_params: Dict[str, Any] = {
+                "query_embedding": vector,
+                "match_count": top_k,
+                "filter": where or {},
+            }
+            response = self.client.rpc("match_knowledge_chunks", rpc_params).execute()
+            rows = response.data or []
+
+            chunks: List[FactChunk] = []
+            for row in rows:
+                meta_dict = row.get("metadata") or {}
+                metadata_obj = ChunkMetadata.from_dict(meta_dict)
+                chunks.append(
+                    FactChunk(
+                        id=row["id"],
+                        content=row["content"],
+                        prefixed_content=row["prefixed_content"],
+                        metadata=metadata_obj,
+                    )
+                )
+            return chunks
+        except Exception as e:
+            logger.error(f"Error querying Supabase vector store: {e}", exc_info=True)
+            return []
+
+    def get_by_ids(self, ids: List[str]) -> List[FactChunk]:
+        """Fetch chunks by their IDs from Supabase."""
+        if not ids or not self.is_configured():
+            return []
+
+        try:
+            response = (
+                self.client.table(self.table_name)
+                .select("id, content, prefixed_content, metadata")
+                .in_("id", ids)
+                .execute()
+            )
+            rows = response.data or []
+            chunks: List[FactChunk] = []
+            for row in rows:
+                meta_dict = row.get("metadata") or {}
+                metadata_obj = ChunkMetadata.from_dict(meta_dict)
+                chunks.append(
+                    FactChunk(
+                        id=row["id"],
+                        content=row["content"],
+                        prefixed_content=row["prefixed_content"],
+                        metadata=metadata_obj,
+                    )
+                )
+            return chunks
+        except Exception as e:
+            logger.error(f"Error fetching chunks by ID from Supabase: {e}", exc_info=True)
+            return []
+
+    def count(self) -> int:
+        """Return total number of chunks stored in Supabase."""
+        if not self.is_configured():
+            return 0
+        try:
+            response = (
+                self.client.table(self.table_name)
+                .select("id", count="exact")
+                .limit(0)
+                .execute()
+            )
+            return response.count or 0
+        except Exception as e:
+            logger.error(f"Error counting chunks in Supabase: {e}", exc_info=True)
+            return 0
+
+    def clear(self) -> None:
+        """Clear all chunks from the Supabase vector table."""
+        if not self.is_configured():
+            return
+        try:
+            self.client.table(self.table_name).delete().neq("id", "___nonexistent_dummy___").execute()
+        except Exception as e:
+            logger.error(f"Error clearing Supabase vector table: {e}", exc_info=True)
+
+
+# Cached singletons
+_chroma_store: Optional[ChromaVectorStore] = None
+_supabase_store: Optional[SupabaseVectorStore] = None
+
+
+def get_vector_store(
+    backend: Optional[str] = None,
+    collection_name: str = DEFAULT_COLLECTION_NAME,
+    persist_dir: Optional[Path] = None,
+    in_memory: bool = False,
+) -> BaseVectorStore:
+    """Resolve and return active vector store based on configuration.
+
+    Args:
+        backend: Optional override ('supabase', 'sqlite', 'chroma').
+                 Defaults to VECTOR_STORE_BACKEND env var.
+        collection_name: Collection or table identifier name.
+        persist_dir: Disk directory for ChromaDB (ignored for Supabase).
+        in_memory: If True, forces ephemeral in-memory Chroma for isolated tests.
+
+    Returns:
+        BaseVectorStore instance.
+    """
+    global _chroma_store, _supabase_store
+
+    # Test isolation always routes to ephemeral ChromaDB
+    if in_memory:
+        return ChromaVectorStore(collection_name=collection_name, in_memory=True)
+
+    # Determine backend preference
+    target_backend = (
+        backend
+        or os.getenv("VECTOR_STORE_BACKEND")
+        or VECTOR_STORE_BACKEND
+        or "supabase"
+    ).strip().lower()
+
+    if target_backend in ("supabase", "pgvector"):
+        if is_supabase_configured():
+            if _supabase_store is None:
+                _supabase_store = SupabaseVectorStore()
+            return _supabase_store
+        else:
+            logger.warning(
+                "VECTOR_STORE_BACKEND is set to 'supabase', but SUPABASE_URL / SUPABASE_ANON_KEY are missing. "
+                "Falling back to local SQLite ChromaDB store."
+            )
+
+    # Default to ChromaDB (SQLite backed)
+    target_persist = persist_dir or CHROMA_PERSIST_DIR
+    if _chroma_store is None or _chroma_store.collection_name != collection_name:
+        _chroma_store = ChromaVectorStore(
+            collection_name=collection_name,
+            persist_dir=target_persist,
+            in_memory=False,
+        )
+    return _chroma_store

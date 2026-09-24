@@ -13,11 +13,12 @@ from src.config import (
     get_resource_search_paths,
     BATCH_SIZE,
     EMBEDDING_MODEL,
+    VECTOR_STORE_BACKEND,
 )
 from src.rag.pdf_loader import PDFLoader
 from src.rag.chunker import TextbookChunker
 from src.rag.embeddings import EmbeddingClient
-from src.rag.store import ChromaVectorStore
+from src.rag.store import ChromaVectorStore, SupabaseVectorStore, get_vector_store
 from src.rag.retriever import BM25Store
 from src.rag.schema import FactChunk
 
@@ -105,10 +106,13 @@ def run_ingestion(
     override_paper: Optional[str] = None,
     override_subject: Optional[str] = None,
     dry_run: bool = False,
+    backend: Optional[str] = None,
 ):
     """Run full ingestion pipeline for one or all discovered syllabus PDFs."""
     ensure_directories()
     page_range = parse_page_range(page_range_str)
+
+    effective_backend = (backend or VECTOR_STORE_BACKEND or "supabase").strip().lower()
 
     # Determine files to process
     if source_pdf:
@@ -123,6 +127,7 @@ def run_ingestion(
     print("=" * 76)
     print(" 📚 UPSC Multi-Subject Knowledge Base Ingestion Pipeline")
     print("=" * 76)
+    print(f" Target Vector Backend    : {effective_backend}")
     print(f" Total PDF Resources Found: {len(target_pdfs)}")
     print(f" Embedding Model          : {EMBEDDING_MODEL}")
     print(f" Batch Size               : {batch_size}")
@@ -194,9 +199,10 @@ def run_ingestion(
     for chunk, emb in zip(all_chunks, all_embeddings):
         chunk.embedding = emb
 
-    # 3. Upsert into ChromaDB
-    print("\n[Step 3/4] Upserting into ChromaDB persistent store...")
-    store = ChromaVectorStore()
+    # 3. Upsert into Vector Store
+    store = get_vector_store(backend=backend)
+    backend_label = "Supabase pgvector" if isinstance(store, SupabaseVectorStore) else "ChromaDB (SQLite)"
+    print(f"\n[Step 3/4] Upserting into {backend_label} store...")
     if clear_existing:
         print("  • Clearing existing collection...")
         store.clear()
@@ -271,6 +277,13 @@ def main():
         help="Clear existing collection before ingesting",
     )
     parser.add_argument(
+        "--backend",
+        type=str,
+        default=None,
+        choices=["supabase", "sqlite", "chroma"],
+        help=f"Target vector store backend (default: from .env, currently '{VECTOR_STORE_BACKEND}')",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Scan and display discovered PDFs and detected metadata without running embeddings",
@@ -288,6 +301,7 @@ def main():
             override_paper=args.paper,
             override_subject=args.subject,
             dry_run=args.dry_run,
+            backend=args.backend,
         )
     except Exception as e:
         print(f"\n[Error] Ingestion failed: {e}", file=sys.stderr)

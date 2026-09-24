@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from typing import Optional
+from src.config import VECTOR_STORE_BACKEND
 from src.rag.retriever import get_retriever, HybridRetriever
 from src.rag.schema import RetrievalResult
 
@@ -96,11 +96,18 @@ def main():
     parser.add_argument("--paper", type=str, default=None, help="Filter by GS Paper (e.g. 'GS-1', 'GS-2').")
     parser.add_argument("--subject", type=str, default=None, help="Filter by Subject (e.g. 'Modern History', 'Polity').")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive query prompt.")
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default=None,
+        choices=["supabase", "sqlite", "chroma"],
+        help=f"Vector store backend (default: from .env, currently '{VECTOR_STORE_BACKEND}')",
+    )
 
     args = parser.parse_args()
 
     try:
-        retriever = get_retriever()
+        retriever = get_retriever(backend=args.backend)
     except Exception as e:
         print(f"[Error initializing retriever]: {e}")
         sys.exit(1)
