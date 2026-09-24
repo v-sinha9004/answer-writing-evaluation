@@ -5,10 +5,10 @@ import { API_ENDPOINTS, resolvePdfUrl, getBackendHostLabel } from './config/api'
 import './App.css';
 
 const PAPERS = [
-  { id: 'GS-1', label: 'GS 1 • History, Geography, Art & Culture, Society' },
-  { id: 'GS-2', label: 'GS 2 • Polity, Constitution, Governance, Social Justice, IR' },
-  { id: 'GS-3', label: 'GS 3 • Economy, Agri, Science & Tech, Environment, Security' },
-  { id: 'GS-4', label: 'GS 4 • Ethics, Integrity & Aptitude' },
+  { id: 'GS-1', label: 'GS 1' },
+  { id: 'GS-2', label: 'GS 2' },
+  { id: 'GS-3', label: 'GS 3' },
+  { id: 'GS-4', label: 'GS 4' },
 ];
 
 export default function App() {
@@ -369,10 +369,6 @@ export default function App() {
         {!report && (
           <div className="hero">
             <h1 className="hero-title">UPSC Mains Answer Evaluator</h1>
-            <p className="hero-subtitle">
-              Upload your handwritten or typed answer copy in PDF format. Our multi-agent judge panel
-              performs calibrated scoring, RAG fact-verification, and generates model rewrites.
-            </p>
           </div>
         )}
 

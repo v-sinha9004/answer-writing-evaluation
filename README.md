@@ -37,10 +37,11 @@ graph TD
 
 ## 🚀 Deployment
 
-The platform is deployed across two services:
+The platform is deployed across:
 
 - **Backend (Render)**: The FastAPI server is deployed as a Docker service on [Render](https://render.com) using the included [Dockerfile](./Dockerfile).
 - **Frontend (Vercel)**: Live at [https://answer-writing-evaluation.vercel.app/](https://answer-writing-evaluation.vercel.app/) (deployed from `frontend/`, connecting to the Render backend via `VITE_API_BASE_URL`).
+- **Database & Storage (Supabase)**: Evaluation records and PDF storage.
 
 ---
 
@@ -67,6 +68,7 @@ The evaluation pipeline includes built-in tracing and monitoring powered by [Lan
 - [ ] Custom knowledge base as a vector database to retrieve relevant information for the answer evaluation due to LLMs cut-off date.
 - [ ] Real-time streaming evaluation updates via SSE
 - [ ] Human in the loop verification
+- [ ] Optimize pipeline to be cost efficient (cheaper models, context and prompt optimization, etc.)
 
 ---
 
